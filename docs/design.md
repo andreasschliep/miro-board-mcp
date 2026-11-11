@@ -103,6 +103,8 @@ A **domain error** means the tool understood the request but could not do the jo
 
 As implemented with SDK v2: the SDK checks every call against the tool's zod input schema and returns a failed check as an `isError` result. An unexpected exception inside a tool handler also becomes an `isError` result with the exception message. The server therefore catches every expected failure itself and adds a hint; the protocol test (`test/server.test.ts`) checks that an unknown tool is rejected as a protocol error.
 
+Finding from the MCP Inspector (phase 3): the Inspector validates `structuredContent` against the tool's `outputSchema` even when `isError` is true; the server SDK does not. Domain errors therefore carry their details in the text and no `structuredContent`. The only exception is a partial build result of `build_board`, which has exactly the shape of a successful result (`note` carries the hint), so every client accepts it.
+
 ## 7. Resource
 
 `board-spec://schema` (`application/schema+json`): the JSON Schema of the YAML description, served from the generator package. An agent reads it before writing a spec instead of guessing field names. The tool descriptions point to it.

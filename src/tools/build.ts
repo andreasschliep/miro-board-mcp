@@ -305,7 +305,8 @@ async function runBuild(
         text: `${result.aborted ? 'Stopped early' : 'Built with errors'}: ${summary}.\nHint: ${hint}`,
       },
     ],
-    structuredContent: { ...data, error: { message: abortReason ?? 'Some items failed', hint } },
+    // Same shape as a success, so clients that validate against outputSchema accept it.
+    structuredContent: { ...data, note: hint },
   };
 }
 

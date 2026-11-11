@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { LIMITS } from '../src/limits.ts';
 import { previewBoard } from '../src/tools/preview.ts';
-import { buildBoard, type BuildInput } from '../src/tools/build.ts';
+import { buildBoard, buildOutput, type BuildInput } from '../src/tools/build.ts';
 import { data, fakeMiro, testDeps, text, VALID_SPEC } from './helpers.ts';
 
 interface BuildData {
@@ -15,7 +15,7 @@ interface BuildData {
   aborted: boolean;
   abort_reason: string | null;
   retries: number;
-  error?: { message: string; hint: string };
+  note: string;
 }
 
 async function hashOf(spec: string): Promise<string> {
@@ -99,7 +99,7 @@ test('HTTP 401 stops the build at once with a hint about the token', async () =>
   const out = data<BuildData>(result);
   assert.equal(out.aborted, true);
   assert.match(out.abort_reason ?? '', /HTTP 401/);
-  assert.match(out.error?.hint ?? '', /token/);
+  assert.match(out.note, /token/);
   // One board, one frame attempt, nothing after it: 401 is not retried frame by frame.
   assert.equal(miro.calls.filter((c) => c.path.endsWith('/frames')).length, 1);
   assert.deepEqual(
@@ -248,4 +248,20 @@ test('the token never appears in a result', async () => {
     deps,
   );
   assert.ok(!JSON.stringify(result).includes(token));
+});
+
+test('error results carry no structured content, or content that matches the output schema', async () => {
+  // Clients such as the MCP Inspector validate structuredContent even when isError is true.
+  const noToken = await buildBoard(newBoard(), testDeps({ token: null }));
+  assert.equal(noToken.structuredContent, undefined);
+
+  const miro = fakeMiro((call) =>
+    call.path.endsWith('/frames') ? { status: 403, body: {} } : undefined,
+  );
+  const partial = await buildBoard(
+    newBoard({ dry_run: false, confirm_hash: await hashOf(VALID_SPEC) }),
+    testDeps({ miro }),
+  );
+  assert.equal(partial.isError, true);
+  assert.doesNotThrow(() => buildOutput.parse(partial.structuredContent));
 });

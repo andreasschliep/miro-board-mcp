@@ -67,10 +67,11 @@ test('semantic errors point to the frame', () => {
   assert.match(report.errors[0]?.message ?? '', /unknown template/);
 });
 
-test('an empty spec is a tool error with a hint', () => {
+test('an empty spec is a tool error with a hint and no structured content', () => {
   const result = validateBoardSpec('   \n', deps);
   assert.equal(result.isError, true);
-  assert.equal(data<{ code: string }>(result).code, 'empty');
+  assert.equal(result.structuredContent, undefined);
+  assert.match(text(result), /"code":"empty"/);
   assert.match(text(result), /Hint:/);
 });
 
@@ -78,13 +79,13 @@ test('a spec above the size limit is rejected before parsing', () => {
   const big = `name: X\nframes: []\n# ${'x'.repeat(LIMITS.specBytes)}\n`;
   const result = validateBoardSpec(big, deps);
   assert.equal(result.isError, true);
-  assert.equal(data<{ code: string }>(result).code, 'too_large');
+  assert.match(text(result), /"code":"too_large"/);
 });
 
 test('invalid YAML is a tool error', () => {
   const result = validateBoardSpec('name: [unclosed\n', deps);
   assert.equal(result.isError, true);
-  assert.equal(data<{ code: string }>(result).code, 'yaml');
+  assert.match(text(result), /"code":"yaml"/);
 });
 
 test('!include is refused without reading a file', () => {
@@ -93,7 +94,7 @@ test('!include is refused without reading a file', () => {
     deps,
   );
   assert.equal(result.isError, true);
-  assert.equal(data<{ code: string }>(result).code, 'include');
+  assert.match(text(result), /"code":"include"/);
 });
 
 test('an alias bomb is stopped by the node limit', () => {
@@ -107,7 +108,7 @@ test('an alias bomb is stopped by the node limit', () => {
   assert.ok(bomb.length < 2_000, 'the bomb itself is tiny');
   const result = validateBoardSpec(bomb, deps);
   assert.equal(result.isError, true);
-  assert.equal(data<{ code: string }>(result).code, 'too_complex');
+  assert.match(text(result), /"code":"too_complex"/);
 });
 
 test('countNodes stops counting at the limit', () => {
@@ -180,5 +181,6 @@ test('preview lists frames in build order with totals and a hash', async () => {
 test('preview of an invalid spec is a tool error that carries the validation', async () => {
   const result = await previewBoard('name: X\nframes:\n  - title: no id\n', deps);
   assert.equal(result.isError, true);
-  assert.equal(data<{ validation: Report }>(result).validation.valid, false);
+  assert.equal(result.structuredContent, undefined);
+  assert.match(text(result), /"valid":false/);
 });
