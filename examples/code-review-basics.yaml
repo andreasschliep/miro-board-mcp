@@ -1,0 +1,114 @@
+# Fictional example: a 45-minute workshop "Code Review Basics".
+# The content is invented for this repository. It is served as the resource
+# board-spec://example, so agents can see a complete, valid spec.
+
+name: 'Code Review Basics'
+duration: '45 min'
+language: EN
+
+# Optional session phases; a frame with `phase: <key>` gets a small badge.
+phases:
+  C1: { label: 'Connections', color: primary }
+  C2: { label: 'Concepts', color: secondary }
+  C3: { label: 'Concrete Practice', color: accent }
+  C4: { label: 'Conclusions', color: highlight }
+
+frames:
+  - id: welcome
+    title: 'Welcome'
+    phase: C1
+    elements:
+      - type: text
+        content: '<p><strong>What makes a review helpful for you?</strong></p>'
+        x: 0
+        y: -250
+        width: 900
+        fontSize: 24
+        textAlign: center
+      # `repeat` creates one sticky per data item; {{field}} is replaced.
+      - type: sticky
+        content: '{{prompt}}'
+        x: -300
+        y: 0
+        color: light_yellow
+        repeat:
+          layout: horizontal
+          spacingX: 300
+          data:
+            - { prompt: 'A review that taught me something...' }
+            - { prompt: 'A review that annoyed me...' }
+            - { prompt: 'What I look at first...' }
+
+  - id: what-to-check
+    title: 'What to Check'
+    phase: C2
+    # Templates: columns, exercise, cardGrid.
+    template: columns
+    templateData:
+      columns:
+        - title: 'Correctness'
+          items: ['Does it do what the ticket says?', 'Edge cases covered by tests?']
+        - title: 'Clarity'
+          items: ['Names say what things are', 'One idea per function']
+        - title: 'Safety'
+          items: ['No secrets in code', 'Inputs checked at the boundary']
+
+  - id: flow
+    title: 'From Pull Request to Merge'
+    phase: C2
+    elements:
+      - type: shape
+        ref: open
+        content: '<p>Open</p>'
+        x: -500
+        y: 0
+        width: 220
+        height: 100
+        shape: round_rectangle
+        color: secondary
+        textColor: white
+      - type: shape
+        ref: review
+        content: '<p>Review</p>'
+        x: 0
+        y: 0
+        width: 220
+        height: 100
+        shape: round_rectangle
+        color: secondary
+        textColor: white
+      - type: shape
+        ref: merge
+        content: '<p>Merge</p>'
+        x: 500
+        y: 0
+        width: 220
+        height: 100
+        shape: round_rectangle
+        color: secondary
+        textColor: white
+      # Connectors link elements by `ref`.
+      - { type: connector, from: open, to: review }
+      - { type: connector, from: review, to: merge }
+
+  - id: practice
+    title: 'Review a Sample Change'
+    phase: C3
+    template: exercise
+    templateData:
+      instructions: 'In pairs, review the sample change. Write one helpful and one unhelpful comment.'
+      timebox: '10 min'
+
+  - id: wrap-up
+    title: 'Takeaways'
+    phase: C4
+    elements:
+      - type: sticky
+        content: '{{value}}'
+        x: -300
+        y: 0
+        color: light_green
+        repeat:
+          layout: horizontal
+          spacingX: 300
+          data: ['One thing I will keep', 'One thing I will try', 'One question left']
