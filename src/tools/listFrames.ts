@@ -16,10 +16,10 @@ const MAX_PAGES = 10;
 const frameInfo = z.object({
   id: z.string(),
   title: z.string(),
-  x: z.number().nullable(),
-  y: z.number().nullable(),
-  width: z.number().nullable(),
-  height: z.number().nullable(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
 });
 
 export const listFramesOutput = z.object({
@@ -70,10 +70,10 @@ export async function listFrames(boardId: string, deps: ServerDeps): Promise<Cal
         frames.push({
           id: String(item.id ?? ''),
           title: item.data?.title ?? '',
-          x: item.position?.x ?? null,
-          y: item.position?.y ?? null,
-          width: item.geometry?.width ?? null,
-          height: item.geometry?.height ?? null,
+          ...(item.position?.x !== undefined ? { x: item.position.x } : {}),
+          ...(item.position?.y !== undefined ? { y: item.position.y } : {}),
+          ...(item.geometry?.width !== undefined ? { width: item.geometry.width } : {}),
+          ...(item.geometry?.height !== undefined ? { height: item.geometry.height } : {}),
         });
       }
       cursor = page?.cursor;

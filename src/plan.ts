@@ -18,7 +18,7 @@ export interface PlannedFrame {
   order: number;
   id: string;
   title: string;
-  phase: string | null;
+  phase?: string;
   elements: number;
 }
 
@@ -39,12 +39,12 @@ export async function planBuild(board: NormalizedBoard): Promise<BuildPlan> {
   });
   const result = await builder.build('preview', board, { dryRun: true });
 
-  const phases = new Map(board.frames.map((frame) => [frame.id, frame.phase ?? null]));
+  const phases = new Map(board.frames.map((frame) => [frame.id, frame.phase]));
   const frames = entries.map((entry, index) => ({
     order: index + 1,
     id: entry.frameId,
     title: entry.title,
-    phase: phases.get(entry.frameId) ?? null,
+    ...(phases.get(entry.frameId) ? { phase: phases.get(entry.frameId) } : {}),
     elements: entry.elements,
   }));
 

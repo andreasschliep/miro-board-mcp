@@ -64,7 +64,7 @@ export type BuildInput = z.infer<typeof buildInput>;
 const frameOutcome = z.object({
   frame_id: z.string(),
   title: z.string(),
-  miro_id: z.string().nullable(),
+  miro_id: z.string().optional(),
   elements: z.number(),
   errors: z.number(),
   status: z.string(),
@@ -75,8 +75,8 @@ const frameOutcome = z.object({
 export const buildOutput = z.object({
   dry_run: z.boolean(),
   target: z.string(),
-  board_id: z.string().nullable(),
-  board_url: z.string().nullable(),
+  board_id: z.string().optional(),
+  board_url: z.string().optional(),
   created_board: z.boolean(),
   spec_hash: z.string(),
   totals: planTotals,
@@ -85,7 +85,7 @@ export const buildOutput = z.object({
   frames: z.array(frameOutcome).nullable(),
   failures: z.array(z.string()),
   aborted: z.boolean(),
-  abort_reason: z.string().nullable(),
+  abort_reason: z.string().optional(),
   retries: z.number(),
   note: z.string(),
 });
@@ -172,7 +172,7 @@ export async function buildBoard(
       output({
         dry_run: true,
         target: targetText,
-        board_id: 'board_id' in input.target ? input.target.board_id : null,
+        ...('board_id' in input.target ? { board_id: input.target.board_id } : {}),
         spec_hash: plan.spec_hash,
         totals: { ...plan.totals, api_calls: apiCalls },
         estimated_seconds: plan.estimated_seconds,
@@ -272,7 +272,7 @@ async function runBuild(
     frames: frames.map((entry) => ({
       frame_id: entry.frameId,
       title: entry.title,
-      miro_id: entry.miroId,
+      ...(entry.miroId ? { miro_id: entry.miroId } : {}),
       elements: entry.elements,
       errors: entry.errors,
       status: entry.status,
@@ -280,7 +280,7 @@ async function runBuild(
     })),
     failures: logger.errors,
     aborted: result.aborted,
-    abort_reason: abortReason,
+    ...(abortReason ? { abort_reason: abortReason } : {}),
     retries: transport.stats?.retries ?? 0,
   });
 
@@ -314,8 +314,6 @@ function output(
   fields: Partial<BuildOutput> & Pick<BuildOutput, 'dry_run' | 'target'>,
 ): BuildOutput {
   return {
-    board_id: null,
-    board_url: null,
     created_board: false,
     spec_hash: '',
     totals: { frames: 0, elements: 0, connectors: 0, api_calls: 0 },
@@ -324,7 +322,6 @@ function output(
     frames: null,
     failures: [],
     aborted: false,
-    abort_reason: null,
     retries: 0,
     note: NOT_IDEMPOTENT,
     ...fields,

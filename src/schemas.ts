@@ -42,7 +42,7 @@ export const plannedFrame = z.object({
   order: z.number(),
   id: z.string(),
   title: z.string(),
-  phase: z.string().nullable(),
+  phase: z.string().optional(),
   elements: z.number(),
 });
 
