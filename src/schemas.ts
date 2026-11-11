@@ -13,7 +13,7 @@ export const specInput = z
       'board-spec://example shows a complete spec.',
   );
 
-/** Miro board ids look like "uXjVAbCdEf0="; the pattern keeps them safe in URL paths. */
+/** Miro board ids are short base64-like strings ending in "="; the pattern keeps them safe in URL paths. */
 export const boardIdInput = z
   .string()
   .min(1)
