@@ -34,6 +34,8 @@ export function isBoardAllowed(deps: ServerDeps, boardId: string): boolean {
   return deps.config.allowedBoardIds.has(boardId) || deps.state.createdBoards.has(boardId);
 }
 
+/** Board ids only contain URL-safe characters (see boardIdInput); encode anything else. */
 export function boardUrl(boardId: string): string {
-  return `https://miro.com/app/board/${encodeURIComponent(boardId)}/`;
+  const id = /^[A-Za-z0-9_=-]+$/.test(boardId) ? boardId : encodeURIComponent(boardId);
+  return `https://miro.com/app/board/${id}/`;
 }

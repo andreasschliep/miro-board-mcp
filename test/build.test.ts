@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { boardUrl } from '../src/deps.ts';
 import { LIMITS } from '../src/limits.ts';
 import { previewBoard } from '../src/tools/preview.ts';
 import { buildBoard, buildOutput, type BuildInput } from '../src/tools/build.ts';
@@ -264,4 +265,9 @@ test('error results carry no structured content, or content that matches the out
   );
   assert.equal(partial.isError, true);
   assert.doesNotThrow(() => buildOutput.parse(partial.structuredContent));
+});
+
+test('board URLs keep "=" readable and encode anything unusual', () => {
+  assert.equal(boardUrl('aBcD1234xyz='), 'https://miro.com/app/board/aBcD1234xyz=/');
+  assert.equal(boardUrl('a/b'), 'https://miro.com/app/board/a%2Fb/');
 });
