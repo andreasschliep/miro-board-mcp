@@ -58,8 +58,10 @@ export function registerValidateBoardSpec(server: McpServer, deps: ServerDeps): 
       description:
         'Check a Miro board description (YAML) without building anything. Returns errors with a ' +
         'JSON path, warnings, texts that will not fit their shape, and layout warnings for ' +
-        'elements outside their frame or on the title bar. Coordinates are offsets from the ' +
-        'frame centre; for a line, toX/toY are distances from x/y. Read the resource ' +
+        'overlapping frames and for elements outside their frame or on the title bar. ' +
+        'Coordinates are offsets from the frame centre; for a line, toX/toY are distances ' +
+        'from x/y; layout.frameSpacing and rowSpacing are distances between frame centres, ' +
+        'not gaps. Read the resource ' +
         'board-spec://schema before writing a spec. An invalid spec is a normal answer here ' +
         '(valid: false); fix errors and layout warnings and call this tool again.',
       inputSchema: z.object({ spec: specInput }),

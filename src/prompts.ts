@@ -37,7 +37,8 @@ export function workshopPrompt(args: z.infer<typeof workshopArgs>): string {
       'short texts that fit their shapes. Use invented examples only, no real people, ' +
       'customers or company names.',
     '3. Call validate_board_spec and fix the spec until it is valid and has no layout warnings. ' +
-      'Coordinates are offsets from the frame centre; for a line, toX/toY are distances from x/y.',
+      'Coordinates are offsets from the frame centre; for a line, toX/toY are distances from x/y. ' +
+      'layout.frameSpacing and rowSpacing are distances between frame centres, not gaps.',
     '4. Call preview_board and show me the frame list with element counts and the estimated duration.',
     '5. Ask me whether to build. Do not continue without my explicit yes.',
     '6. After my yes, call build_board with target { new_board_name }, dry_run: false and ' +

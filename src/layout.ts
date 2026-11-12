@@ -1,10 +1,15 @@
 /**
- * Layout warnings: elements that leave their frame or cover the title bar.
+ * Layout warnings: frames that overlap, elements that leave their frame or cover the
+ * title bar.
  *
  * Found in the first end-to-end run: an agent read toX/toY as absolute end points
  * (they are distances from x/y), and every axis came out diagonal and partly outside
- * its frame. The schema now says so, and this check catches it before anything is
- * built. Coordinates are offsets from the frame centre (generator convention).
+ * its frame. Found in the second: an agent read layout.frameSpacing and rowSpacing as
+ * gaps (they are distances between frame centres), and four 3000-wide frames landed
+ * 300 apart, on top of each other. The schema now explains both, and these checks
+ * catch them before anything is built. Element coordinates are offsets from the frame
+ * centre; frame positions are board coordinates of the frame centre (generator
+ * convention).
  *
  * Warnings, not errors: the spec stays buildable, but validate and preview show them,
  * and the agent is told to fix them first.
@@ -91,8 +96,51 @@ function checkElement(
   return null;
 }
 
-export function layoutFindings(board: NormalizedBoard): LayoutFinding[] {
+/** Gap between frames that the overlap message suggests. */
+export const SUGGESTED_FRAME_GAP = 200;
+
+/**
+ * Every pair of frames whose rectangles overlap. Frames that only touch are fine.
+ * The finding sits on the later frame of the pair.
+ */
+function frameOverlaps(board: NormalizedBoard): LayoutFinding[] {
   const findings: LayoutFinding[] = [];
+  const frames = board.frames;
+  if (frames.length < 2) return findings;
+
+  const maxW = Math.max(...frames.map((f) => f.width));
+  const maxH = Math.max(...frames.map((f) => f.height));
+  const hint =
+    'layout.frameSpacing and layout.rowSpacing are distances between frame centres, not gaps; ' +
+    `for frames of ${maxW} x ${maxH}, frameSpacing ${maxW + SUGGESTED_FRAME_GAP} and rowSpacing ` +
+    `${maxH + SUGGESTED_FRAME_GAP} leave a gap of ${SUGGESTED_FRAME_GAP}.`;
+
+  for (const [j, later] of frames.entries()) {
+    for (const earlier of frames.slice(0, j)) {
+      const overlapX =
+        Math.min(later.x + later.width / 2, earlier.x + earlier.width / 2) -
+        Math.max(later.x - later.width / 2, earlier.x - earlier.width / 2);
+      const overlapY =
+        Math.min(later.y + later.height / 2, earlier.y + earlier.height / 2) -
+        Math.max(later.y - later.height / 2, earlier.y - earlier.height / 2);
+      if (overlapX > 0 && overlapY > 0) {
+        findings.push({
+          frame_id: later.id,
+          path: `/frames/${j}`,
+          message:
+            `frame overlaps frame "${earlier.id}" by ${Math.round(overlapX)} x ` +
+            `${Math.round(overlapY)} units (centres at (${earlier.x}, ${earlier.y}) and ` +
+            `(${later.x}, ${later.y})). ${hint}`,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
+export function layoutFindings(board: NormalizedBoard): LayoutFinding[] {
+  // Overlapping frames first: they break the whole board, not one element.
+  const findings: LayoutFinding[] = frameOverlaps(board);
   const style = (board.style ?? {}) as { headerBar?: boolean };
 
   for (const [index, frame] of board.frames.entries()) {

@@ -53,7 +53,7 @@ export interface ValidationReport {
   errors: Finding[];
   warnings: Finding[];
   text_fit: TextFitFinding[];
-  /** Elements outside their frame or on the title bar (src/layout.ts). */
+  /** Overlapping frames, elements outside their frame or on the title bar (src/layout.ts). */
   layout: LayoutFinding[];
   summary: { frames: number; spec_elements: number };
 }

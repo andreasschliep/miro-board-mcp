@@ -64,6 +64,51 @@ test('group items are checked at their real position', () => {
   assert.match(findings[0]?.message ?? '', /extends 50 units/);
 });
 
+function frames(yaml: string) {
+  const parser = new BoardParser({ allowInclude: false });
+  return parser.normalize(parser.loadString(`name: Frames\n${yaml}`));
+}
+
+test('frames placed with spacing read as a gap overlap, and the message says why', () => {
+  // The layout from the second end-to-end run: 300 was meant as the gap between frames.
+  const findings = layoutFindings(
+    frames(
+      'layout: { frameSpacing: 300, rowSpacing: 300, defaultFrameWidth: 3000, defaultFrameHeight: 1800 }\n' +
+        'frames:\n' +
+        '  - { id: a, title: A, row: 0, col: 0 }\n' +
+        '  - { id: b, title: B, row: 0, col: 1 }\n' +
+        '  - { id: c, title: C, row: 1, col: 0 }\n' +
+        '  - { id: d, title: D, row: 1, col: 1 }\n',
+    ),
+  );
+  assert.equal(findings.length, 6);
+  assert.equal(findings[0]?.frame_id, 'b');
+  assert.equal(findings[0]?.path, '/frames/1');
+  assert.match(findings[0]?.message ?? '', /overlaps frame "a" by 2700 x 1800 units/);
+  assert.match(findings[0]?.message ?? '', /distances between frame centres, not gaps/);
+  assert.match(findings[0]?.message ?? '', /frameSpacing 3200 and rowSpacing 2000/);
+});
+
+test('frames on the default layout, or exactly touching, do not overlap', () => {
+  const defaults = frames('frames:\n  - { id: a, title: A }\n  - { id: b, title: B }\n');
+  assert.deepEqual(layoutFindings(defaults), []);
+  const touching = frames(
+    'layout: { frameSpacing: 1600 }\nframes:\n  - { id: a, title: A }\n  - { id: b, title: B }\n',
+  );
+  assert.deepEqual(layoutFindings(touching), []);
+});
+
+test('frames with their own x and y are checked too', () => {
+  const findings = layoutFindings(
+    frames(
+      'frames:\n  - { id: a, title: A, x: 0, y: 0 }\n' +
+        '  - { id: b, title: B, x: 1000, y: 500, width: 800, height: 600 }\n',
+    ),
+  );
+  assert.equal(findings.length, 1);
+  assert.match(findings[0]?.message ?? '', /overlaps frame "a" by 200 x 300 units/);
+});
+
 test('layout warnings do not make a spec invalid but are part of the report', () => {
   const spec =
     'name: X\nframes:\n  - id: a\n    title: A\n    elements:\n' +
