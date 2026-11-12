@@ -81,6 +81,8 @@ export const buildOutput = z.object({
   spec_hash: z.string(),
   totals: planTotals,
   estimated_seconds: z.number(),
+  /** Real builds only: wall-clock time from creating the board to the last connector. */
+  elapsed_seconds: z.number().optional(),
   planned_frames: z.array(plannedFrame).nullable(),
   frames: z.array(frameOutcome).nullable(),
   failures: z.array(z.string()),
@@ -216,6 +218,7 @@ async function runBuild(
 ): Promise<CallToolResult> {
   const logger = collectingLogger(deps.logger);
   const miro = new MiroClient(transport, { logger });
+  const startedAt = performance.now();
 
   let boardId: string;
   let createdBoard = false;
@@ -250,6 +253,7 @@ async function runBuild(
   const timeout = AbortSignal.timeout(deps.buildTimeoutMs);
   const signal = hooks.signal ? AbortSignal.any([hooks.signal, timeout]) : timeout;
   const result = await builder.build(boardId, board, { signal });
+  const elapsedSeconds = Math.round((performance.now() - startedAt) / 1000);
 
   const abortReason =
     result.aborted && timeout.aborted
@@ -269,6 +273,7 @@ async function runBuild(
       api_calls: transport.stats?.requests ?? apiCalls,
     },
     estimated_seconds: plan.estimated_seconds,
+    elapsed_seconds: elapsedSeconds,
     frames: frames.map((entry) => ({
       frame_id: entry.frameId,
       title: entry.title,
@@ -286,7 +291,8 @@ async function runBuild(
 
   const summary =
     `${result.framesCreated} of ${total} frames, ${result.elementsCreated} elements and ` +
-    `${result.connectorsCreated} connectors on ${boardUrl(boardId)}`;
+    `${result.connectorsCreated} connectors on ${boardUrl(boardId)} in ${elapsedSeconds} s ` +
+    `(estimated ${plan.estimated_seconds} s)`;
   if (!result.aborted && result.errors === 0) {
     return success(`Built: ${summary}.\n${NOT_IDEMPOTENT}`, data);
   }

@@ -12,6 +12,7 @@ interface BuildData {
   board_url: string | null;
   created_board: boolean;
   totals: { frames: number; elements: number; connectors: number; api_calls: number };
+  elapsed_seconds?: number;
   frames: Array<{ frame_id: string; status: string; miro_id: string | null }> | null;
   aborted: boolean;
   abort_reason: string | null;
@@ -86,6 +87,8 @@ test('a confirmed build creates the board and all frames', async () => {
   assert.equal(miro.calls[0]?.path, '/boards');
   assert.ok(deps.state.createdBoards.has('item-1'));
   assert.match(text(result), /not idempotent/);
+  assert.equal(typeof out.elapsed_seconds, 'number');
+  assert.match(text(result), /in \d+ s \(estimated \d+ s\)/);
 });
 
 test('HTTP 401 stops the build at once with a hint about the token', async () => {
