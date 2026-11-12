@@ -63,7 +63,8 @@ Every tool returns a short text summary plus `structuredContent` that matches a 
 
 - **Input:** `spec` (string, YAML, at most 100 KB).
 - **Steps:** parse without `!include` → size guard → JSON Schema → semantic checks (unique ids, connector references, templates, phases) → text-fit check.
-- **Output:** `{ valid, errors: [{path, message}], warnings: [{path, message}], text_fit: [{frame_id, element_index, text, deficit_px}], summary: {frames, elements} }`
+- **Output:** `{ valid, errors: [{path, message}], warnings: [{path, message}], text_fit: [{frame_id, element_index, text, deficit_px}], layout: [{frame_id, path, message}], summary: {frames, spec_elements} }`
+- **Layout warnings** (`src/layout.ts`, added after the first end-to-end run): an element that extends beyond its frame, a line whose start or end lies outside the frame, or an element on the 60-unit title bar. They are warnings, not errors; the tool text and the prompt template tell the agent to fix them before building.
 - **Errors:** an invalid spec is the expected answer of this tool, so it returns `isError: false` with `valid: false` (decision D3). `isError: true` only if the spec cannot be read at all (not YAML, too large, alias bomb).
 
 ### 5.2 `preview_board`
@@ -188,6 +189,8 @@ Configuration is environment only: `MIRO_ACCESS_TOKEN` (required for `build_boar
 
 **D11 External URLs off by default.** Decision: `image` and `embed` need an allowed host. Alternative: allow everything. Reason: a board should not show content the human did not choose; the demo does not need images.
 
+**D13 Layout problems are warnings.** Decision: elements outside their frame or on the title bar are reported as layout warnings; the spec stays valid. Alternative: treat them as errors. Reason: an overhang can be intended, but a line ending far outside the frame is almost always a misunderstanding; the warning names the cause (toX/toY are distances) so the agent fixes it before the human sees the preview.
+
 **D12 Typed boundary to the generator.** Decision: a local declaration file `src/types/miro-board-builder.d.ts` that types only the part of the generator the server uses. Alternative: add type declarations to the generator itself. Reason: the server states exactly which generator API it depends on; the generator stays unchanged. If the generator ships its own types later, the local file is deleted.
 
 ## 11. Generator changes (approved 11 November 2026)
@@ -228,6 +231,12 @@ Build and run: `npm run build` (`tsc`) writes `dist/`; clients start `node dist/
 3. MCP Inspector: all four tools, the resource and the prompt visible and callable; screenshot without token.
 4. `claude mcp add`, then an end-to-end run on a test board in your own Miro account, built only after your confirmation.
 5. `gitleaks detect --no-git -s .` and the portfolio denylist: zero hits.
+
+### Findings from phase 3
+
+- **MCP Inspector:** structuredContent is validated on error results by some clients (section 6), and type arrays such as `["string","null"]` are less portable; both fixed.
+- **First end-to-end run (12 November 2026):** the agent followed the intended order (resources, validate, preview, question, build after the user's yes) and built 11 frames without errors. But it read `toX`/`toY` as absolute end points, so the axes of three map frames came out diagonal and partly outside their frames. Nothing in the schema said otherwise and no check caught it. Fixes: descriptions for `x`, `y`, `toX`, `toY` in the generator schema, a line in the example spec, and layout warnings in `validate_board_spec` and `preview_board`. The spec from that run now produces 9 layout warnings that name the cause.
+- **Prompt template as a slash command:** Claude Code asks for every argument; `participants` and `learning_objectives` are now optional.
 
 ## 14. Decisions taken and open points
 
