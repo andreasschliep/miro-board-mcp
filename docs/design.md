@@ -189,7 +189,9 @@ Configuration is environment only: `MIRO_ACCESS_TOKEN` (required for `build_boar
 
 **D11 External URLs off by default.** Decision: `image` and `embed` need an allowed host. Alternative: allow everything. Reason: a board should not show content the human did not choose; the demo does not need images.
 
-**D13 Layout problems are warnings.** Decision: elements outside their frame or on the title bar are reported as layout warnings; the spec stays valid. Alternative: treat them as errors. Reason: an overhang can be intended, but a line ending far outside the frame is almost always a misunderstanding; the warning names the cause (toX/toY are distances) so the agent fixes it before the human sees the preview.
+**D13 Layout problems are warnings.** Decision: overlapping frames, and elements outside their frame or on the title bar, are reported as layout warnings; the spec stays valid. Alternative: treat them as errors. Reason: an overhang can be intended, but a line ending far outside the frame or two frames on top of each other are almost always a misunderstanding; the warning names the cause (toX/toY are distances, frameSpacing/rowSpacing are distances between centres) so the agent fixes it before the human sees the preview.
+
+**D14 Elements stay unparented.** Decision: the server keeps the generator default `style.parentElements: false`. Alternative: make every element a child of its frame. Reason: the parented path has not been tried in a live build through this server, embeds cannot be parented, and Miro then measures child positions from the frame's top-left corner; switching the default needs a live build first. Cost: moving a frame in Miro leaves its elements behind, so a misplaced frame cannot be repaired by hand. The schema says so, and D13 catches overlapping frames before the build.
 
 **D12 Typed boundary to the generator.** Decision: a local declaration file `src/types/miro-board-builder.d.ts` that types only the part of the generator the server uses. Alternative: add type declarations to the generator itself. Reason: the server states exactly which generator API it depends on; the generator stays unchanged. If the generator ships its own types later, the local file is deleted.
 
@@ -203,6 +205,8 @@ Rule: the generator is not changed without approval. Both changes are implemente
 | B   | `builder.build(boardId, board, { signal })` checks the signal between frames, and stops on 401, 403 and 404 instead of trying every frame | cancellation and "abort with partial result" (9.2)          | about 30 lines plus tests |
 
 Without approval the server would override the parser's internal `_schema()` method for A, and wrap the transport so that it fails every further call after the first fatal error for B. That works, but it depends on private internals.
+
+Approved with the phase 3 fixes on 12 November 2026, also on `mcp-support`: descriptions in `schema/board.schema.json` for element `x`, `y`, `toX`, `toY`, for `layout.startX`, `frameSpacing`, `rowSpacing`, for frame `row`, `col`, `x`, `y`, and for what `style.parentElements: false` means. Descriptions only; no behaviour changes.
 
 ## 12. Project layout and tooling
 
@@ -237,6 +241,8 @@ Build and run: `npm run build` (`tsc`) writes `dist/`; clients start `node dist/
 - **MCP Inspector:** structuredContent is validated on error results by some clients (section 6), and type arrays such as `["string","null"]` are less portable; both fixed.
 - **First end-to-end run (12 November 2026):** the agent followed the intended order (resources, validate, preview, question, build after the user's yes) and built 11 frames without errors. But it read `toX`/`toY` as absolute end points, so the axes of three map frames came out diagonal and partly outside their frames. Nothing in the schema said otherwise and no check caught it. Fixes: descriptions for `x`, `y`, `toX`, `toY` in the generator schema, a line in the example spec, and layout warnings in `validate_board_spec` and `preview_board`. The spec from that run now produces 9 layout warnings that name the cause.
 - **Prompt template as a slash command:** Claude Code asks for every argument; `participants` and `learning_objectives` are now optional.
+- **Second end-to-end run (12 November 2026, a 46 KB spec with four Wardley maps):** validation, preview and build worked as designed: 4 frames, 279 elements, 76 connectors, 360 API calls (preview: 359, plus creating the board), 0 errors, 0 retries, 269 s against an estimate of 234 s. The layout warnings from the first run kept the lines inside their frames. But the agent read `layout.frameSpacing` and `rowSpacing` as gaps; with 300 for 3000 x 1800 frames, all four frames landed on top of each other. Because elements are not parented (D14), moving the frames in Miro does not help. Fixes: schema descriptions for the frame layout, a layout warning for overlapping frames (the spec from that run now produces 6), and `elapsed_seconds` in the result of `build_board`.
+- **Smaller findings from the second run, not fixed yet:** a duplicate `ref` is reported with the path `/` instead of the element; unknown values for connector `shape`, `startCap`/`endCap` and line `color` pass silently because the schema has no enums for them; a text-fit warning does not say whether width or height is short; the full spec is sent again with every call.
 
 ## 14. Decisions taken and open points
 
@@ -251,3 +257,4 @@ Answered on 11 November 2026:
 Open:
 
 - A separate Miro team or developer account for the test token (phase 3).
+- A live build with `style.parentElements: true` before deciding whether to change D14.
