@@ -25,12 +25,14 @@ test('a valid spec is valid', () => {
   assert.match(text(result), /^Valid: 3 frames/);
 });
 
-test('the example served as a resource is valid', () => {
+test('the example served as a resource is valid and has no layout warnings', () => {
   const example = readFileSync(
     new URL('../examples/code-review-basics.yaml', import.meta.url),
     'utf8',
   );
-  assert.equal(data<Report>(validateBoardSpec(example, deps)).valid, true);
+  const report = data<Report & { layout: unknown[] }>(validateBoardSpec(example, deps));
+  assert.equal(report.valid, true);
+  assert.deepEqual(report.layout, []);
 });
 
 test('missing required fields are reported with a path, not as a tool error', () => {
