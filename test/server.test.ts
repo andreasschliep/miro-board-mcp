@@ -107,3 +107,14 @@ test('build_board without a token is a domain error, not a crash', async () => {
 test('an unknown tool is a protocol error', async () => {
   await assert.rejects(client.callTool({ name: 'delete_board', arguments: {} }));
 });
+
+test('the prompt template works with only topic and duration', async () => {
+  const prompt = await client.getPrompt({
+    name: 'workshop_to_board',
+    arguments: { topic: 'Pairing', duration_minutes: '60' },
+  });
+  const message = prompt.messages[0]?.content;
+  assert.ok(message && message.type === 'text');
+  assert.match(message.text, /60-minute workshop on "Pairing"\./);
+  assert.match(message.text, /Propose three learning objectives/);
+});

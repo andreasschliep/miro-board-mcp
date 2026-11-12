@@ -14,24 +14,30 @@ export const workshopArgs = z.object({
   participants: z
     .string()
     .regex(/^\d{1,4}$/, 'A number, e.g. 12.')
-    .describe('Number of participants.'),
-  learning_objectives: z.string().min(1).describe('Learning objectives, one per line.'),
+    .optional()
+    .describe('Number of participants (optional).'),
+  learning_objectives: z
+    .string()
+    .optional()
+    .describe('Learning objectives, one per line (optional; the agent proposes some if missing).'),
 });
 
 export function workshopPrompt(args: z.infer<typeof workshopArgs>): string {
   return [
-    `Create a Miro board for a ${args.duration_minutes}-minute workshop on "${args.topic}" ` +
-      `for ${args.participants} participants.`,
+    `Create a Miro board for a ${args.duration_minutes}-minute workshop on "${args.topic}"` +
+      (args.participants ? ` for ${args.participants} participants.` : '.'),
     '',
-    'Learning objectives:',
-    args.learning_objectives,
+    ...(args.learning_objectives
+      ? ['Learning objectives:', args.learning_objectives]
+      : ['Propose three learning objectives and show them to me with the preview.']),
     '',
     'Work in this order:',
     '1. Read the resources board-spec://schema and board-spec://example.',
     '2. Write a board spec in YAML: one frame per agenda block, in session order, with ' +
       'short texts that fit their shapes. Use invented examples only, no real people, ' +
       'customers or company names.',
-    '3. Call validate_board_spec and fix the spec until it is valid.',
+    '3. Call validate_board_spec and fix the spec until it is valid and has no layout warnings. ' +
+      'Coordinates are offsets from the frame centre; for a line, toX/toY are distances from x/y.',
     '4. Call preview_board and show me the frame list with element counts and the estimated duration.',
     '5. Ask me whether to build. Do not continue without my explicit yes.',
     '6. After my yes, call build_board with target { new_board_name }, dry_run: false and ' +
