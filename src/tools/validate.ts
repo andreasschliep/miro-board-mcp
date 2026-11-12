@@ -26,11 +26,12 @@ export function validateBoardSpec(spec: string, deps: ServerDeps): CallToolResul
 function describe(report: ValidationReport): string {
   const { frames, spec_elements } = report.summary;
   if (report.valid) {
-    return (
+    const summary =
       `Valid: ${frames} frames, ${spec_elements} elements in the spec, ` +
-      `${report.warnings.length} warnings, ${report.text_fit.length} text-fit warnings. ` +
-      'Next: preview_board.'
-    );
+      `${report.warnings.length} warnings, ${report.text_fit.length} text-fit warnings, ` +
+      `${report.layout.length} layout warnings.`;
+    if (report.layout.length === 0) return `${summary} Next: preview_board.`;
+    return `${summary}\n${layoutLines(report)}\nFix the layout warnings, then validate again.`;
   }
   const first = report.errors
     .slice(0, 5)
@@ -42,6 +43,13 @@ function describe(report: ValidationReport): string {
   );
 }
 
+/** The first layout warnings as text lines (shared with preview_board). */
+export function layoutLines(report: ValidationReport, max = 8): string {
+  const lines = report.layout.slice(0, max).map((l) => `- ${l.path} (${l.frame_id}): ${l.message}`);
+  if (report.layout.length > max) lines.push(`- ... ${report.layout.length - max} more`);
+  return lines.join('\n');
+}
+
 export function registerValidateBoardSpec(server: McpServer, deps: ServerDeps): void {
   server.registerTool(
     'validate_board_spec',
@@ -49,9 +57,11 @@ export function registerValidateBoardSpec(server: McpServer, deps: ServerDeps): 
       title: 'Validate a board spec',
       description:
         'Check a Miro board description (YAML) without building anything. Returns errors with a ' +
-        'JSON path, warnings, and texts that will not fit their shape. Read the resource ' +
+        'JSON path, warnings, texts that will not fit their shape, and layout warnings for ' +
+        'elements outside their frame or on the title bar. Coordinates are offsets from the ' +
+        'frame centre; for a line, toX/toY are distances from x/y. Read the resource ' +
         'board-spec://schema before writing a spec. An invalid spec is a normal answer here ' +
-        '(valid: false); fix it and call this tool again until it is valid.',
+        '(valid: false); fix errors and layout warnings and call this tool again.',
       inputSchema: z.object({ spec: specInput }),
       outputSchema: validationReport,
       annotations: {

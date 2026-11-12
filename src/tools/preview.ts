@@ -10,8 +10,16 @@ import type { ServerDeps } from '../deps.ts';
 import { LIMITS } from '../limits.ts';
 import { planBuild } from '../plan.ts';
 import { domainError, success } from '../results.ts';
-import { finding, plannedFrame, planTotals, specInput, textFitFinding } from '../schemas.ts';
+import {
+  finding,
+  layoutFinding,
+  plannedFrame,
+  planTotals,
+  specInput,
+  textFitFinding,
+} from '../schemas.ts';
 import { checkSpec, SpecError } from '../spec.ts';
+import { layoutLines } from './validate.ts';
 
 export const previewOutput = z.object({
   board_name: z.string(),
@@ -21,6 +29,7 @@ export const previewOutput = z.object({
   spec_hash: z.string(),
   warnings: z.array(finding),
   text_fit: z.array(textFitFinding),
+  layout: z.array(layoutFinding),
 });
 
 export async function previewBoard(spec: string, deps: ServerDeps): Promise<CallToolResult> {
@@ -57,10 +66,18 @@ export async function previewBoard(spec: string, deps: ServerDeps): Promise<Call
     `Preview of "${plan.board_name}": ${plan.totals.frames} frames, ${plan.totals.elements} elements, ` +
     `${plan.totals.connectors} connectors, ${plan.totals.api_calls} Miro API calls ` +
     `(about ${plan.estimated_seconds} s).\n${lines.join('\n')}\n` +
+    (report.layout.length > 0
+      ? `Layout warnings (${report.layout.length}); fix them before building:\n${layoutLines(report)}\n`
+      : '') +
     `spec_hash: ${plan.spec_hash}\n` +
     'Show this list to the user. Only after the user confirms, call build_board with ' +
     'dry_run: false and confirm_hash set to spec_hash.';
-  return success(text, { ...plan, warnings: report.warnings, text_fit: report.text_fit });
+  return success(text, {
+    ...plan,
+    warnings: report.warnings,
+    text_fit: report.text_fit,
+    layout: report.layout,
+  });
 }
 
 export function registerPreviewBoard(server: McpServer, deps: ServerDeps): void {

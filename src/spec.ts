@@ -7,6 +7,7 @@
  * 3. node count with aliases     (before the generator copies the document)
  * 4. JSON Schema + semantic checks + text fit (generator)
  * 5. limits and URL policy       (this server)
+ * 6. layout warnings             (this server, src/layout.ts)
  */
 import { createHash } from 'node:crypto';
 import {
@@ -16,6 +17,7 @@ import {
   type NormalizedBoard,
   type RawBoard,
 } from 'miro-board-builder';
+import { layoutFindings, type LayoutFinding } from './layout.ts';
 import { LIMITS } from './limits.ts';
 
 export type SpecErrorCode = 'empty' | 'too_large' | 'yaml' | 'include' | 'too_complex';
@@ -51,6 +53,8 @@ export interface ValidationReport {
   errors: Finding[];
   warnings: Finding[];
   text_fit: TextFitFinding[];
+  /** Elements outside their frame or on the title bar (src/layout.ts). */
+  layout: LayoutFinding[];
   summary: { frames: number; spec_elements: number };
 }
 
@@ -150,7 +154,7 @@ export function checkSpec(text: string, policy: SpecPolicy): CheckedSpec {
   if (normalizeError && errors.length === 0) errors.push({ path: '/', message: normalizeError });
 
   if (errors.length > 0 || !board) {
-    return { report: report(false, errors, warnings, [], board), board: null };
+    return { report: report(false, errors, warnings, [], [], board), board: null };
   }
 
   errors.push(...limitFindings(board), ...urlFindings(board, policy));
@@ -160,7 +164,11 @@ export function checkSpec(text: string, policy: SpecPolicy): CheckedSpec {
     text: issue.text,
     deficit_px: Math.round(issue.deficit),
   }));
-  return { report: report(errors.length === 0, errors, warnings, textFit, board), board };
+  const layout = layoutFindings(board);
+  return {
+    report: report(errors.length === 0, errors, warnings, textFit, layout, board),
+    board,
+  };
 }
 
 function report(
@@ -168,6 +176,7 @@ function report(
   errors: Finding[],
   warnings: Finding[],
   textFit: TextFitFinding[],
+  layout: LayoutFinding[],
   board: NormalizedBoard | null,
 ): ValidationReport {
   return {
@@ -175,6 +184,7 @@ function report(
     errors,
     warnings,
     text_fit: textFit,
+    layout,
     summary: { frames: board?.frames.length ?? 0, spec_elements: board ? countElements(board) : 0 },
   };
 }

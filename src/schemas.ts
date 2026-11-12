@@ -30,11 +30,18 @@ export const textFitFinding = z.object({
   deficit_px: z.number(),
 });
 
+export const layoutFinding = z.object({
+  frame_id: z.string(),
+  path: z.string(),
+  message: z.string(),
+});
+
 export const validationReport = z.object({
   valid: z.boolean(),
   errors: z.array(finding),
   warnings: z.array(finding),
   text_fit: z.array(textFitFinding),
+  layout: z.array(layoutFinding),
   summary: z.object({ frames: z.number(), spec_elements: z.number() }),
 });
 
