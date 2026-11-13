@@ -1,0 +1,3 @@
+[submodule "vendor/miro-board-builder"]
+	path = vendor/miro-board-builder
+	url = https://github.com/andreasschliep/miro-board-builder.git
