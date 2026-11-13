@@ -347,3 +347,25 @@ Scope before 17 November: Wardley maps and flowcharts, then one end-to-end run.
 - New dependencies, pinned, each at least two weeks old on 13 November 2026: `marked` 18.1.2, `@mermaid-js/parser` 2.0.1, `mermaid` 12.2.0, `jsdom` 30.1.3, `@dagrejs/dagre` 3.1.3, `js-yaml` 5.5.0 (front matter).
 - Mermaid keeps one database per diagram type, so flowchart parsing runs one at a time.
 - Checked with the Wardley document from run 2 (three `wardley-beta` maps with pipelines as bands): valid, no warnings, 5 frames, 305 API calls; a local SVG rendering of the composed frames showed the bands on their lines and no element outside its frame.
+
+### 15.10 Third end-to-end run and fault test (13 November 2026)
+
+**Run:** an agent wrote a fictional 60-minute workshop document with text, sticky notes, a flowchart with a subgraph and a decision, and a Wardley map with a pipeline, using only the guide and the example. `validate_board` found it valid on the first call, with no warnings; preview: 6 frames, 75 elements, 18 connectors, 99 API calls, 65 s estimated. Two counts confused the agent: every frame counted one element more than its content (the title bar), and `validate_board`'s count (elements and connectors, no title bars) did not match the preview's (elements with title bars, connectors apart). Both texts now say so.
+
+**Fault test:** the same agent sent a document with 20 deliberate mistakes. 13 were reported, 4 of them with messages that did not help (raw parser tokens, a later line than the cause, an internal path); 7 passed silently. Fixes, each with a test:
+
+| Mistake                                             | Before                                                            | Now                                                                     |
+| --------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| unclosed `[` in a flowchart line                    | parser error two lines later                                      | error on the line itself, "opens [ but does not close it"               |
+| unquoted Wardley name with an umlaut                | "found `nge`"                                                     | the lexer's error and "needs double quotes, e.g. component \"Zugänge\"" |
+| code block never closed                             | parser error, later frames silently lost                          | error on the opening line: everything after it was read as code         |
+| map label outside the frame                         | start of the block, internal path                                 | line of the statement, `line N` as path, element named with its text    |
+| Wardley value above 1                               | silently clamped                                                  | error with the line, drawing continues so other findings still appear   |
+| `fill:green`, `click`                               | ignored silently                                                  | warning with the line                                                   |
+| `http://` link                                      | link silently dropped                                             | warning: only the text is kept                                          |
+| duplicate frame title                               | silent second id                                                  | warning naming both lines                                               |
+| sticky note over 140, node label over 80 characters | nothing (the text-fit check only covers shapes with a fixed size) | warning with the line                                                   |
+
+Also: findings are sorted by line; a document with only a title gives one error with a line instead of an additional schema error; `evolve` on a pipeline part is not drawn and gets a warning, because Mermaid does not draw it either (found while rendering a map with Mermaid 12.2).
+
+Not tested yet: `build_board` with `dry_run: false` and a wrong `confirm_hash` against Miro (covered by unit tests only).
