@@ -258,3 +258,92 @@ Open:
 
 - A separate Miro team or developer account for the test token (phase 3).
 - A live build with `style.parentElements: true` before deciding whether to change D14.
+
+## 15. Markdown and Mermaid as input (approved and implemented, 13 November 2026)
+
+**Status: implemented on 13 November 2026 with the decisions in 15.8; the end-to-end run is still open.**
+
+### 15.1 Why
+
+Andreas wants Markdown and Mermaid as the source of a board; the YAML spec of the generator becomes an implementation detail of this server. There is a second reason: both end-to-end failures came from coordinates the agent wrote itself (`toX`/`toY` in run 1, `frameSpacing`/`rowSpacing` in run 2). If the server computes every position, these error classes disappear; the layout warnings (D13) stay as a safety net.
+
+### 15.2 Document format
+
+A board is one Markdown document:
+
+| Markdown                                                | On the board                                        |
+| ------------------------------------------------------- | --------------------------------------------------- |
+| `# Title` (first level-1 heading)                       | board name                                          |
+| `## Heading`                                            | one frame, in document order                        |
+| paragraphs under a frame heading                        | a text block at the top of the frame                |
+| bullet list                                             | sticky notes in a grid                              |
+| fenced block ` ```mermaid ` with `wardley-beta`         | a Wardley map that fills the frame                  |
+| fenced block ` ```mermaid ` with `flowchart` or `graph` | shapes and connectors, laid out automatically       |
+| anything else (tables, images, other diagram types)     | not drawn; validation names it with its line number |
+
+The server places frames in a row with a fixed gap and sizes each frame from its content. The agent writes no coordinates, no `ref`s and no spacing. A document that renders in a Markdown viewer or on GitHub is also the board description; the Wardley document from run 2 (`wardley-beta` blocks with pipelines as bands) already has this shape.
+
+### 15.3 Mermaid support
+
+- **`wardley-beta`**, parsed with the official `@mermaid-js/parser` 2.0.1 (Langium grammar, no DOM; checked in Node on 13 November 2026). Mapping: map area with axes and the four evolution stages; anchors and components as circles with labels at `[visibility, evolution]`; links as connectors; `evolve` as a red dashed arrow to a ghost component; pipelines as Mermaid draws them: the parts on the parent's line inside a box, the parent moved to the top centre of the box, a link from a part to its own parent not drawn (this is how bands and groups are written, since the grammar has no group statement); notes as text; numbered annotations. Colours from the block's front matter (`themeVariables.wardley`), as far as they apply.
+- **`flowchart` / `graph`** (TD, LR, BT, RL), parsed with the official `mermaid` (12.2.0 pinned; 12.3.0 was less than two weeks old). In Node it needs a DOM for its sanitiser; with a jsdom window it returned shapes, labels, dotted edges, edge labels, subgraphs and the direction (checked on 13 November 2026). Layout with `@dagrejs/dagre` 3.1.3 (pure JavaScript). Shapes: rectangle, rounded, stadium, diamond, circle; anything else becomes a rectangle with a warning. A subgraph becomes a titled box around its nodes. `classDef` fill and stroke colours are used.
+- Other diagram types are a validation error that lists the supported ones.
+
+### 15.4 Architecture
+
+```text
+Markdown document
+  -> src/document/: Markdown lexer (marked 18), one frame per "##"
+     -> per block: text | stickies | wardley (@mermaid-js/parser) | flowchart (mermaid + jsdom, dagre)
+  -> board object in the generator's format (internal, never shown to the agent)
+  -> unchanged path: validateBoard, text fit, layout check, plan (DryRunTransport), hash, BoardBuilder
+```
+
+- The generator does not change.
+- `confirm_hash` stays the hash of the canonical generated board, so the confirmation binds to exactly what will be drawn.
+- Findings point to Markdown line numbers (frame heading, Mermaid block, line of the Mermaid parse error), not to JSON paths.
+- `preview_board` also lists the position and size of every frame (finding from run 2).
+
+### 15.5 Interface changes
+
+| Today                                         | Proposal                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------- |
+| `validate_board_spec(spec)`                   | `validate_board(document)`                                        |
+| `preview_board(spec)`, `build_board(spec, …)` | same tools, `document` (or `spec`)                                |
+| resource `board-spec://schema`                | `board-doc://guide`: format, supported Mermaid, one small example |
+| resource `board-spec://example` (YAML)        | `board-doc://example` (Markdown)                                  |
+| prompt `workshop_to_board`: write YAML        | write Markdown; no coordinates                                    |
+
+Decided: the YAML spec stays as a second, optional parameter `spec` for exact positions; its schema and example stay as resources marked "advanced". A call with both `document` and `spec` is refused.
+
+### 15.6 What gets simpler, what is lost
+
+- Simpler: no coordinates, no frame layout, no connector refs; the agent needs no schema, only the short guide; the document is readable on its own.
+- Lost: exact control over positions and colours of single elements. Layout quality depends on dagre and on the Wardley mapping.
+- Cost: `mermaid` plus `jsdom` add about 130 MB to `node_modules` (the Wardley parser alone is 11 MB). Alternative for flowcharts: an own parser for a documented subset, small but with a grammar that can drift from Mermaid's.
+
+### 15.7 Plan
+
+1. Markdown frames, text, stickies and `wardley-beta`, with tests (a synthetic map with pipelines as bands, line numbers in errors, hash stability).
+2. `flowchart` with dagre, with tests.
+3. Tools, resources, prompt and design sections 5, 7, 8 updated; old YAML tests converted.
+4. End-to-end run: build the Wardley document from run 2 as a new board after Andreas's yes.
+
+### 15.8 Decisions (Andreas, 13 November 2026)
+
+**D15 A board is a Markdown document.** Decision: `document` (Markdown with Mermaid) is the normal input; the server computes every position. Alternative: keep YAML as the input. Reason: the source stays readable on its own, and the coordinate errors of both end-to-end runs cannot occur.
+
+**D16 Flowcharts with the official Mermaid parser.** Decision: `mermaid` with a jsdom window, layout with dagre. Alternative: an own parser for a subset. Reason: the same grammar as every Mermaid renderer; the cost is about 130 MB of dependencies, loaded only when a flowchart appears.
+
+**D17 Lists become sticky notes.** Decision: one sticky per list item. Alternative: a text block. Reason: on a workshop board, a list is usually material to move around.
+
+**D18 YAML stays as an option.** Decision: a second parameter `spec` for exact positions. Alternative: drop it from the tools. Reason: some boards need exact layout; the agent is told to use it only when the user asks for it.
+
+Scope before 17 November: Wardley maps and flowcharts, then one end-to-end run.
+
+### 15.9 Implementation notes
+
+- `src/document/markdown.ts` (marked lexer), `wardley.ts`, `flowchart.ts`, `compose.ts` (frame layout), `check.ts` (findings to lines); `src/source.ts` picks document or spec.
+- New dependencies, pinned, each at least two weeks old on 13 November 2026: `marked` 18.1.2, `@mermaid-js/parser` 2.0.1, `mermaid` 12.2.0, `jsdom` 30.1.3, `@dagrejs/dagre` 3.1.3, `js-yaml` 5.5.0 (front matter).
+- Mermaid keeps one database per diagram type, so flowchart parsing runs one at a time.
+- Checked with the Wardley document from run 2 (three `wardley-beta` maps with pipelines as bands): valid, no warnings, 5 frames, 305 API calls; a local SVG rendering of the composed frames showed the bands on their lines and no element outside its frame.
