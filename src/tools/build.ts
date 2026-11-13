@@ -26,15 +26,16 @@ import { LIMITS } from '../limits.ts';
 import { collectingLogger } from '../logger.ts';
 import { planBuild, type BuildPlan } from '../plan.ts';
 import { domainError, hintForStatus, miroError, success } from '../results.ts';
-import { boardIdInput, plannedFrame, planTotals, specInput } from '../schemas.ts';
-import { checkSpec, SpecError } from '../spec.ts';
+import { boardIdInput, plannedFrame, planTotals, sourceFields } from '../schemas.ts';
+import { checkSource } from '../source.ts';
+import { SpecError } from '../spec.ts';
 
 const NOT_IDEMPOTENT =
   'build_board is not idempotent: calling it again with new_board_name creates another board; ' +
   'calling it again with board_id adds a second copy of every frame.';
 
 export const buildInput = z.object({
-  spec: specInput,
+  ...sourceFields,
   target: z
     .union([
       z
@@ -56,7 +57,7 @@ export const buildInput = z.object({
   confirm_hash: z
     .string()
     .optional()
-    .describe('Required when dry_run is false: the spec_hash from preview_board for this spec.'),
+    .describe('Required when dry_run is false: the spec_hash from preview_board for this board.'),
 });
 
 export type BuildInput = z.infer<typeof buildInput>;
@@ -110,11 +111,11 @@ export async function buildBoard(
   let board: NormalizedBoard;
   let plan: BuildPlan;
   try {
-    const checked = checkSpec(input.spec, { allowedUrlHosts: deps.config.allowedUrlHosts });
+    const checked = await checkSource(input, { allowedUrlHosts: deps.config.allowedUrlHosts });
     if (!checked.report.valid || !checked.board) {
       return domainError(
-        `The spec is not valid (${checked.report.errors.length} errors).`,
-        'Call validate_board_spec, fix the errors, then preview_board.',
+        `The board is not valid (${checked.report.errors.length} errors).`,
+        'Call validate_board, fix the errors, then preview_board.',
         { validation: checked.report },
       );
     }
@@ -152,7 +153,7 @@ export async function buildBoard(
   if (!token) {
     return domainError(
       'MIRO_ACCESS_TOKEN is not set for this MCP server.',
-      'Ask the user to configure the token (see .env.example). validate_board_spec and ' +
+      'Ask the user to configure the token (see .env.example). validate_board and ' +
         'preview_board work without it.',
     );
   }
@@ -187,9 +188,9 @@ export async function buildBoard(
   if (input.confirm_hash !== plan.spec_hash) {
     return domainError(
       input.confirm_hash
-        ? 'confirm_hash does not match this spec; the spec changed after the preview.'
+        ? 'confirm_hash does not match this board; it changed after the preview.'
         : 'confirm_hash is missing.',
-      'Call preview_board with exactly this spec, show the result to the user, and after the ' +
+      'Call preview_board with exactly this board, show the result to the user, and after the ' +
         'user confirms, call build_board with its spec_hash as confirm_hash.',
     );
   }
@@ -361,8 +362,8 @@ export function registerBuildBoard(server: McpServer, deps: ServerDeps): void {
     {
       title: 'Build a Miro board',
       description:
-        'Build a Miro board from a valid spec. With the default dry_run: true it only checks the ' +
-        'spec, the target and the token, and writes nothing. To write, the user must first have ' +
+        'Build a Miro board from a valid board document (same as validate_board). With the ' +
+        'default dry_run: true it only checks the board, the target and the token, and writes nothing. To write, the user must first have ' +
         'seen preview_board and agreed; then call with dry_run: false and confirm_hash set to the ' +
         "preview's spec_hash. Writes to Miro and is not idempotent: a second call adds a second " +
         'copy. Never call it with dry_run: false without the user confirming.',

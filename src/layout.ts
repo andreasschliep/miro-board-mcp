@@ -20,6 +20,8 @@ export interface LayoutFinding {
   frame_id: string;
   path: string;
   message: string;
+  /** Documents only: the Markdown line of the frame or block. */
+  line?: number;
 }
 
 /** Height of the title bar the generator draws at the top of every frame. */

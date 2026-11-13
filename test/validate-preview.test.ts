@@ -4,7 +4,10 @@ import test from 'node:test';
 import { LIMITS } from '../src/limits.ts';
 import { checkSpec, countNodes, specHash } from '../src/spec.ts';
 import { previewBoard } from '../src/tools/preview.ts';
-import { validateBoardSpec } from '../src/tools/validate.ts';
+import { validateBoard } from '../src/tools/validate.ts';
+import type { ServerDeps } from '../src/deps.ts';
+
+const validateSpec = (spec: string, deps: ServerDeps) => validateBoard({ spec }, deps);
 import { data, testDeps, text, VALID_SPEC } from './helpers.ts';
 
 interface Report {
@@ -16,8 +19,8 @@ interface Report {
 
 const deps = testDeps();
 
-test('a valid spec is valid', () => {
-  const result = validateBoardSpec(VALID_SPEC, deps);
+test('a valid spec is valid', async () => {
+  const result = await validateSpec(VALID_SPEC, deps);
   assert.equal(result.isError, undefined);
   const report = data<Report>(result);
   assert.equal(report.valid, true);
@@ -25,18 +28,18 @@ test('a valid spec is valid', () => {
   assert.match(text(result), /^Valid: 3 frames/);
 });
 
-test('the example served as a resource is valid and has no layout warnings', () => {
+test('the example served as a resource is valid and has no layout warnings', async () => {
   const example = readFileSync(
     new URL('../examples/code-review-basics.yaml', import.meta.url),
     'utf8',
   );
-  const report = data<Report & { layout: unknown[] }>(validateBoardSpec(example, deps));
+  const report = data<Report & { layout: unknown[] }>(await validateSpec(example, deps));
   assert.equal(report.valid, true);
   assert.deepEqual(report.layout, []);
 });
 
-test('missing required fields are reported with a path, not as a tool error', () => {
-  const result = validateBoardSpec('frames:\n  - title: no id\n', deps);
+test('missing required fields are reported with a path, not as a tool error', async () => {
+  const result = await validateSpec('frames:\n  - title: no id\n', deps);
   assert.equal(result.isError, undefined);
   const report = data<Report>(result);
   assert.equal(report.valid, false);
@@ -48,50 +51,50 @@ test('missing required fields are reported with a path, not as a tool error', ()
   assert.match(report.errors[1]?.message ?? '', /id/);
 });
 
-test('wrong types are reported', () => {
-  const frames = data<Report>(validateBoardSpec('name: X\nframes: not-a-list\n', deps));
+test('wrong types are reported', async () => {
+  const frames = data<Report>(await validateSpec('name: X\nframes: not-a-list\n', deps));
   assert.equal(frames.valid, false);
   assert.equal(frames.errors[0]?.path, '/frames');
 
   const width = data<Report>(
-    validateBoardSpec('name: X\nframes:\n  - { id: a, title: A, width: wide }\n', deps),
+    await validateSpec('name: X\nframes:\n  - { id: a, title: A, width: wide }\n', deps),
   );
   assert.equal(width.valid, false);
   assert.equal(width.errors[0]?.path, '/frames/0/width');
 });
 
-test('semantic errors point to the frame', () => {
+test('semantic errors point to the frame', async () => {
   const report = data<Report>(
-    validateBoardSpec('name: X\nframes:\n  - { id: a, title: A, template: nope }\n', deps),
+    await validateSpec('name: X\nframes:\n  - { id: a, title: A, template: nope }\n', deps),
   );
   assert.equal(report.valid, false);
   assert.equal(report.errors[0]?.path, '/frames/0');
   assert.match(report.errors[0]?.message ?? '', /unknown template/);
 });
 
-test('an empty spec is a tool error with a hint and no structured content', () => {
-  const result = validateBoardSpec('   \n', deps);
+test('an empty spec is a tool error with a hint and no structured content', async () => {
+  const result = await validateSpec('   \n', deps);
   assert.equal(result.isError, true);
   assert.equal(result.structuredContent, undefined);
   assert.match(text(result), /"code":"empty"/);
   assert.match(text(result), /Hint:/);
 });
 
-test('a spec above the size limit is rejected before parsing', () => {
+test('a spec above the size limit is rejected before parsing', async () => {
   const big = `name: X\nframes: []\n# ${'x'.repeat(LIMITS.specBytes)}\n`;
-  const result = validateBoardSpec(big, deps);
+  const result = await validateSpec(big, deps);
   assert.equal(result.isError, true);
   assert.match(text(result), /"code":"too_large"/);
 });
 
-test('invalid YAML is a tool error', () => {
-  const result = validateBoardSpec('name: [unclosed\n', deps);
+test('invalid YAML is a tool error', async () => {
+  const result = await validateSpec('name: [unclosed\n', deps);
   assert.equal(result.isError, true);
   assert.match(text(result), /"code":"yaml"/);
 });
 
-test('!include is refused without reading a file', () => {
-  const result = validateBoardSpec(
+test('!include is refused without reading a file', async () => {
+  const result = await validateSpec(
     'name: X\nframes:\n  - id: a\n    title: A\n    elements:\n      - { type: text, content: !include .env }\n',
     deps,
   );
@@ -99,7 +102,7 @@ test('!include is refused without reading a file', () => {
   assert.match(text(result), /"code":"include"/);
 });
 
-test('an alias bomb is stopped by the node limit', () => {
+test('an alias bomb is stopped by the node limit', async () => {
   const levels = ['a: &a ["x","x","x","x","x","x","x","x","x","x"]'];
   for (let i = 1; i <= 6; i++) {
     const prev = String.fromCharCode(96 + i);
@@ -108,44 +111,44 @@ test('an alias bomb is stopped by the node limit', () => {
   }
   const bomb = `name: X\nframes: []\n${levels.join('\n')}\n`;
   assert.ok(bomb.length < 2_000, 'the bomb itself is tiny');
-  const result = validateBoardSpec(bomb, deps);
+  const result = await validateSpec(bomb, deps);
   assert.equal(result.isError, true);
   assert.match(text(result), /"code":"too_complex"/);
 });
 
-test('countNodes stops counting at the limit', () => {
+test('countNodes stops counting at the limit', async () => {
   assert.equal(countNodes({ a: [1, 2] }, 100), 4);
   assert.equal(countNodes(Array(1000).fill(0), 10), 11);
 });
 
-test('a very large but valid structure hits the frame limit', () => {
+test('a very large but valid structure hits the frame limit', async () => {
   const frames = Array.from(
     { length: LIMITS.frames + 1 },
     (_, i) => `  - { id: f${i}, title: F${i} }`,
   );
-  const report = data<Report>(validateBoardSpec(`name: X\nframes:\n${frames.join('\n')}\n`, deps));
+  const report = data<Report>(await validateSpec(`name: X\nframes:\n${frames.join('\n')}\n`, deps));
   assert.equal(report.valid, false);
   assert.match(report.errors[0]?.message ?? '', /51 frames; the limit is 50/);
 });
 
-test('image URLs need an allowed https host', () => {
+test('image URLs need an allowed https host', async () => {
   const spec = (url: string) =>
     `name: X\nframes:\n  - id: a\n    title: A\n    elements:\n      - { type: image, url: "${url}" }\n`;
-  const blocked = data<Report>(validateBoardSpec(spec('https://example.com/a.png'), deps));
+  const blocked = data<Report>(await validateSpec(spec('https://example.com/a.png'), deps));
   assert.equal(blocked.valid, false);
   assert.equal(blocked.errors[0]?.path, '/frames/0/elements/0/url');
 
-  const insecure = data<Report>(validateBoardSpec(spec('http://example.com/a.png'), deps));
+  const insecure = data<Report>(await validateSpec(spec('http://example.com/a.png'), deps));
   assert.match(insecure.errors[0]?.message ?? '', /https/);
 
   const allowed = testDeps({ allowedUrlHosts: ['example.com'] });
   assert.equal(
-    data<Report>(validateBoardSpec(spec('https://example.com/a.png'), allowed)).valid,
+    data<Report>(await validateSpec(spec('https://example.com/a.png'), allowed)).valid,
     true,
   );
 });
 
-test('the spec hash ignores key order and changes with the content', () => {
+test('the spec hash ignores key order and changes with the content', async () => {
   const policy = { allowedUrlHosts: new Set<string>() };
   const hash = (spec: string) => specHash(checkSpec(spec, policy).board!);
   const a = hash('name: X\nframes:\n  - { id: a, title: A }\n');
@@ -157,7 +160,7 @@ test('the spec hash ignores key order and changes with the content', () => {
 });
 
 test('preview lists frames in build order with totals and a hash', async () => {
-  const result = await previewBoard(VALID_SPEC, deps);
+  const result = await previewBoard({ spec: VALID_SPEC }, deps);
   assert.equal(result.isError, undefined);
   const plan = data<{
     frames: Array<{ order: number; id: string; elements: number }>;
@@ -181,7 +184,7 @@ test('preview lists frames in build order with totals and a hash', async () => {
 });
 
 test('preview of an invalid spec is a tool error that carries the validation', async () => {
-  const result = await previewBoard('name: X\nframes:\n  - title: no id\n', deps);
+  const result = await previewBoard({ spec: 'name: X\nframes:\n  - title: no id\n' }, deps);
   assert.equal(result.isError, true);
   assert.equal(result.structuredContent, undefined);
   assert.match(text(result), /"valid":false/);

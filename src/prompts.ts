@@ -1,6 +1,6 @@
 /**
  * Prompt template workshop_to_board: a reusable instruction a user can pick in the
- * client. It encodes the safe order: schema, spec, validate, preview, confirm, build.
+ * client. It encodes the safe order: guide, document, validate, preview, confirm, build.
  */
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -32,13 +32,12 @@ export function workshopPrompt(args: z.infer<typeof workshopArgs>): string {
       : ['Propose three learning objectives and show them to me with the preview.']),
     '',
     'Work in this order:',
-    '1. Read the resources board-spec://schema and board-spec://example.',
-    '2. Write a board spec in YAML: one frame per agenda block, in session order, with ' +
-      'short texts that fit their shapes. Use invented examples only, no real people, ' +
-      'customers or company names.',
-    '3. Call validate_board_spec and fix the spec until it is valid and has no layout warnings. ' +
-      'Coordinates are offsets from the frame centre; for a line, toX/toY are distances from x/y. ' +
-      'layout.frameSpacing and rowSpacing are distances between frame centres, not gaps.',
+    '1. Read the resources board-doc://guide and board-doc://example.',
+    '2. Write the board as Markdown: "# Title", one "## Heading" per agenda block in session ' +
+      'order, short paragraphs, bullet lists for sticky notes, and a Mermaid flowchart where a ' +
+      'flow helps. Use invented examples only, no real people, customers or company names.',
+    '3. Call validate_board with the document and fix it until it is valid. Findings name ' +
+      'the Markdown line. Write no coordinates; the server places everything.',
     '4. Call preview_board and show me the frame list with element counts and the estimated duration.',
     '5. Ask me whether to build. Do not continue without my explicit yes.',
     '6. After my yes, call build_board with target { new_board_name }, dry_run: false and ' +
@@ -52,7 +51,7 @@ export function registerPrompts(server: McpServer): void {
     {
       title: 'Workshop to board',
       description:
-        'Turn a workshop idea into a Miro board: write a spec, validate it, show a preview, ' +
+        'Turn a workshop idea into a Miro board: write a Markdown document, validate it, show a preview, ' +
         'and build only after the user confirms.',
       argsSchema: workshopArgs,
     },

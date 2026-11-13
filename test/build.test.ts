@@ -21,7 +21,7 @@ interface BuildData {
 }
 
 async function hashOf(spec: string): Promise<string> {
-  const preview = await previewBoard(spec, testDeps());
+  const preview = await previewBoard({ spec }, testDeps());
   return data<{ spec_hash: string }>(preview).spec_hash;
 }
 
@@ -62,7 +62,7 @@ test('a missing or wrong confirm hash writes nothing', async () => {
 
   const wrong = await buildBoard(newBoard({ dry_run: false, confirm_hash: 'sha256:00' }), deps);
   assert.equal(wrong.isError, true);
-  assert.match(text(wrong), /spec changed after the preview/);
+  assert.match(text(wrong), /changed after the preview/);
   assert.equal(miro.calls.length, 0);
   assert.equal(deps.state.buildsStarted, 0);
 });

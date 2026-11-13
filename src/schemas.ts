@@ -5,13 +5,28 @@
 import { z } from 'zod';
 import { LIMITS } from './limits.ts';
 
+export const documentInput = z
+  .string()
+  .max(LIMITS.specBytes)
+  .describe(
+    'The board as Markdown: "# Board name", one "## Heading" per frame; paragraphs become ' +
+      'text, bullet lists sticky notes, and ```mermaid blocks (flowchart or wardley-beta) ' +
+      'diagrams. The server places everything; write no coordinates. Read board-doc://guide first.',
+  );
+
 export const specInput = z
   .string()
   .max(LIMITS.specBytes)
   .describe(
-    'Board description as YAML text. Read the resource board-spec://schema first; ' +
-      'board-spec://example shows a complete spec.',
+    'Advanced, instead of document: a YAML spec in the generator format with exact ' +
+      'coordinates (board-spec://schema). Use it only when the user asks for exact positions.',
   );
+
+/** Every tool that reads a board takes it the same way. */
+export const sourceFields = {
+  document: documentInput.optional(),
+  spec: specInput.optional(),
+};
 
 /** Miro board ids are short base64-like strings ending in "="; the pattern keeps them safe in URL paths. */
 export const boardIdInput = z
@@ -21,19 +36,25 @@ export const boardIdInput = z
   .regex(/^[A-Za-z0-9_=-]+$/, 'A Miro board id contains letters, digits, "_", "-" and "=".')
   .describe('Id of an existing Miro board (the part after /board/ in its URL).');
 
-export const finding = z.object({ path: z.string(), message: z.string() });
+export const finding = z.object({
+  path: z.string(),
+  message: z.string(),
+  line: z.number().optional(),
+});
 
 export const textFitFinding = z.object({
   frame_id: z.string(),
   element_index: z.number(),
   text: z.string(),
   deficit_px: z.number(),
+  line: z.number().optional(),
 });
 
 export const layoutFinding = z.object({
   frame_id: z.string(),
   path: z.string(),
   message: z.string(),
+  line: z.number().optional(),
 });
 
 export const validationReport = z.object({
@@ -51,6 +72,11 @@ export const plannedFrame = z.object({
   title: z.string(),
   phase: z.string().optional(),
   elements: z.number(),
+  /** Where the frame goes: centre and size in board units (finding from run 2). */
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
 });
 
 export const planTotals = z.object({

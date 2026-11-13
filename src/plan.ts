@@ -20,6 +20,10 @@ export interface PlannedFrame {
   title: string;
   phase?: string;
   elements: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface BuildPlan {
@@ -39,14 +43,21 @@ export async function planBuild(board: NormalizedBoard): Promise<BuildPlan> {
   });
   const result = await builder.build('preview', board, { dryRun: true });
 
-  const phases = new Map(board.frames.map((frame) => [frame.id, frame.phase]));
-  const frames = entries.map((entry, index) => ({
-    order: index + 1,
-    id: entry.frameId,
-    title: entry.title,
-    ...(phases.get(entry.frameId) ? { phase: phases.get(entry.frameId) } : {}),
-    elements: entry.elements,
-  }));
+  const byId = new Map(board.frames.map((frame) => [frame.id, frame]));
+  const frames = entries.map((entry, index) => {
+    const frame = byId.get(entry.frameId);
+    return {
+      order: index + 1,
+      id: entry.frameId,
+      title: entry.title,
+      ...(frame?.phase ? { phase: frame.phase } : {}),
+      elements: entry.elements,
+      x: frame?.x ?? 0,
+      y: frame?.y ?? 0,
+      width: frame?.width ?? 0,
+      height: frame?.height ?? 0,
+    };
+  });
 
   return {
     board_name: board.name,

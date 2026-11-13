@@ -16,18 +16,20 @@ import { registerResources } from './resources.ts';
 import { registerBuildBoard } from './tools/build.ts';
 import { registerListFrames } from './tools/listFrames.ts';
 import { registerPreviewBoard } from './tools/preview.ts';
-import { registerValidateBoardSpec } from './tools/validate.ts';
+import { registerValidateBoard } from './tools/validate.ts';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
 const INSTRUCTIONS =
-  'Builds Miro boards from a YAML description. Order: read board-spec://schema, write a spec, ' +
-  'validate_board_spec until valid, preview_board, show the preview to the user, and call ' +
-  'build_board with dry_run: false and confirm_hash only after the user confirms.';
+  'Builds Miro boards from a Markdown document: one "## Heading" per frame, text, bullet lists ' +
+  'as sticky notes, Mermaid flowcharts and Wardley maps. The server places everything. Order: ' +
+  'read board-doc://guide, write the document, validate_board until valid, preview_board, show ' +
+  'the preview to the user, and call build_board with dry_run: false and confirm_hash only ' +
+  'after the user confirms.';
 
 export function createServer(deps: ServerDeps = defaultDeps()): McpServer {
   const server = new McpServer({ name: 'miro-board-mcp', version }, { instructions: INSTRUCTIONS });
-  registerValidateBoardSpec(server, deps);
+  registerValidateBoard(server, deps);
   registerPreviewBoard(server, deps);
   registerBuildBoard(server, deps);
   registerListFrames(server, deps);

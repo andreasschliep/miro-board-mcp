@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BoardParser } from 'miro-board-builder';
 import { layoutFindings } from '../src/layout.ts';
-import { validateBoardSpec } from '../src/tools/validate.ts';
+import { validateBoard } from '../src/tools/validate.ts';
+import type { ServerDeps } from '../src/deps.ts';
+
+const validateSpec = (spec: string, deps: ServerDeps) => validateBoard({ spec }, deps);
 import { data, testDeps } from './helpers.ts';
 
 function board(elements: string, frameExtra = '', style = '') {
@@ -14,7 +17,7 @@ function board(elements: string, frameExtra = '', style = '') {
   );
 }
 
-test('axes written with absolute end points are reported, with the reason', () => {
+test('axes written with absolute end points are reported, with the reason', async () => {
   // The lines from the first end-to-end run: toX/toY were meant as absolute end points.
   const findings = layoutFindings(
     board(
@@ -28,7 +31,7 @@ test('axes written with absolute end points are reported, with the reason', () =
   assert.equal(findings[1]?.path, '/frames/0/elements/1');
 });
 
-test('the same axes written as distances are fine', () => {
+test('the same axes written as distances are fine', async () => {
   const findings = layoutFindings(
     board(
       '      - { type: line, x: -650, y: 400, toX: 0, toY: -760 }\n' +
@@ -38,7 +41,7 @@ test('the same axes written as distances are fine', () => {
   assert.deepEqual(findings, []);
 });
 
-test('an element that sticks out of the frame is reported with the overhang', () => {
+test('an element that sticks out of the frame is reported with the overhang', async () => {
   const findings = layoutFindings(
     board('      - { type: shape, x: 750, y: 0, width: 200, height: 100 }\n'),
   );
@@ -46,14 +49,14 @@ test('an element that sticks out of the frame is reported with the overhang', ()
   assert.match(findings[0]?.message ?? '', /shape extends 50 units beyond the frame edge/);
 });
 
-test('an element on the title bar is reported, unless the frame has none', () => {
+test('an element on the title bar is reported, unless the frame has none', async () => {
   const onBar = '      - { type: text, content: Label, x: 0, y: -470 }\n';
   assert.match(layoutFindings(board(onBar))[0]?.message ?? '', /overlaps the title bar/);
   assert.deepEqual(layoutFindings(board(onBar, '    headerBar: false\n')), []);
   assert.deepEqual(layoutFindings(board(onBar, '', 'style: { headerBar: false }\n')), []);
 });
 
-test('group items are checked at their real position', () => {
+test('group items are checked at their real position', async () => {
   const findings = layoutFindings(
     board(
       '      - type: group\n        x: 700\n        y: 0\n        items:\n' +
@@ -69,7 +72,7 @@ function frames(yaml: string) {
   return parser.normalize(parser.loadString(`name: Frames\n${yaml}`));
 }
 
-test('frames placed with spacing read as a gap overlap, and the message says why', () => {
+test('frames placed with spacing read as a gap overlap, and the message says why', async () => {
   // The layout from the second end-to-end run: 300 was meant as the gap between frames.
   const findings = layoutFindings(
     frames(
@@ -89,7 +92,7 @@ test('frames placed with spacing read as a gap overlap, and the message says why
   assert.match(findings[0]?.message ?? '', /frameSpacing 3200 and rowSpacing 2000/);
 });
 
-test('frames on the default layout, or exactly touching, do not overlap', () => {
+test('frames on the default layout, or exactly touching, do not overlap', async () => {
   const defaults = frames('frames:\n  - { id: a, title: A }\n  - { id: b, title: B }\n');
   assert.deepEqual(layoutFindings(defaults), []);
   const touching = frames(
@@ -98,7 +101,7 @@ test('frames on the default layout, or exactly touching, do not overlap', () => 
   assert.deepEqual(layoutFindings(touching), []);
 });
 
-test('frames with their own x and y are checked too', () => {
+test('frames with their own x and y are checked too', async () => {
   const findings = layoutFindings(
     frames(
       'frames:\n  - { id: a, title: A, x: 0, y: 0 }\n' +
@@ -109,11 +112,11 @@ test('frames with their own x and y are checked too', () => {
   assert.match(findings[0]?.message ?? '', /overlaps frame "a" by 200 x 300 units/);
 });
 
-test('layout warnings do not make a spec invalid but are part of the report', () => {
+test('layout warnings do not make a spec invalid but are part of the report', async () => {
   const spec =
     'name: X\nframes:\n  - id: a\n    title: A\n    elements:\n' +
     '      - { type: line, x: 0, y: 0, toX: 2000, toY: 0 }\n';
-  const result = validateBoardSpec(spec, testDeps());
+  const result = await validateSpec(spec, testDeps());
   const report = data<{ valid: boolean; layout: Array<{ frame_id: string }> }>(result);
   assert.equal(report.valid, true);
   assert.equal(report.layout.length, 1);

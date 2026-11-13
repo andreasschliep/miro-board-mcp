@@ -15,10 +15,11 @@ import {
   layoutFinding,
   plannedFrame,
   planTotals,
-  specInput,
+  sourceFields,
   textFitFinding,
 } from '../schemas.ts';
-import { checkSpec, SpecError } from '../spec.ts';
+import { checkSource, type SourceInput } from '../source.ts';
+import { SpecError } from '../spec.ts';
 import { layoutLines } from './validate.ts';
 
 export const previewOutput = z.object({
@@ -32,10 +33,10 @@ export const previewOutput = z.object({
   layout: z.array(layoutFinding),
 });
 
-export async function previewBoard(spec: string, deps: ServerDeps): Promise<CallToolResult> {
+export async function previewBoard(input: SourceInput, deps: ServerDeps): Promise<CallToolResult> {
   let checked;
   try {
-    checked = checkSpec(spec, { allowedUrlHosts: deps.config.allowedUrlHosts });
+    checked = await checkSource(input, { allowedUrlHosts: deps.config.allowedUrlHosts });
   } catch (error) {
     if (error instanceof SpecError)
       return domainError(error.message, error.hint, { code: error.code });
@@ -44,8 +45,8 @@ export async function previewBoard(spec: string, deps: ServerDeps): Promise<Call
   const { report, board } = checked;
   if (!report.valid || !board) {
     return domainError(
-      `The spec is not valid (${report.errors.length} errors).`,
-      'Call validate_board_spec, fix the errors, then preview again.',
+      `The board is not valid (${report.errors.length} errors).`,
+      'Call validate_board, fix the errors, then preview again.',
       { validation: report },
     );
   }
@@ -60,7 +61,9 @@ export async function previewBoard(spec: string, deps: ServerDeps): Promise<Call
   }
 
   const lines = plan.frames.map(
-    (f) => `${f.order}. ${f.title}${f.phase ? ` [${f.phase}]` : ''}: ${f.elements} elements`,
+    (f) =>
+      `${f.order}. ${f.title}${f.phase ? ` [${f.phase}]` : ''}: ${f.elements} elements, ` +
+      `${f.width} x ${f.height} at (${f.x}, ${f.y})`,
   );
   const text =
     `Preview of "${plan.board_name}": ${plan.totals.frames} frames, ${plan.totals.elements} elements, ` +
@@ -86,11 +89,12 @@ export function registerPreviewBoard(server: McpServer, deps: ServerDeps): void 
     {
       title: 'Preview a board',
       description:
-        'Dry run for a valid spec, without contacting Miro: the frames build_board would create, ' +
-        'in build order with element counts, the number of Miro API calls, an estimated duration ' +
-        'and spec_hash. Show the frame list to the user and ask for confirmation before calling ' +
-        'build_board; pass spec_hash as confirm_hash.',
-      inputSchema: z.object({ spec: specInput }),
+        'Dry run for a valid board (same document as validate_board), without contacting Miro: ' +
+        'the frames build_board would create, in build order with element counts, position and ' +
+        'size, the number of Miro API calls, an estimated duration and spec_hash. Show the frame ' +
+        'list to the user and ask for confirmation before calling build_board; pass spec_hash ' +
+        'as confirm_hash.',
+      inputSchema: z.object(sourceFields),
       outputSchema: previewOutput,
       annotations: {
         readOnlyHint: true,
@@ -99,6 +103,6 @@ export function registerPreviewBoard(server: McpServer, deps: ServerDeps): void 
         openWorldHint: false,
       },
     },
-    ({ spec }) => previewBoard(spec, deps),
+    (input) => previewBoard(input, deps),
   );
 }

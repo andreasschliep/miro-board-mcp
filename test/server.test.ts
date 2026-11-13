@@ -37,9 +37,9 @@ test('lists the four tools with their annotations', async () => {
     'build_board',
     'list_frames',
     'preview_board',
-    'validate_board_spec',
+    'validate_board',
   ]);
-  assert.equal(byName.validate_board_spec?.annotations?.readOnlyHint, true);
+  assert.equal(byName.validate_board?.annotations?.readOnlyHint, true);
   assert.equal(byName.preview_board?.annotations?.readOnlyHint, true);
   assert.equal(byName.build_board?.annotations?.readOnlyHint, false);
   assert.equal(byName.build_board?.annotations?.idempotentHint, false);
@@ -48,12 +48,18 @@ test('lists the four tools with their annotations', async () => {
   assert.ok(byName.build_board?.outputSchema, 'tools declare an output schema');
 });
 
-test('serves the schema and example resources', async () => {
+test('serves the guide, the examples and the schema', async () => {
   const { resources } = await client.listResources();
   assert.deepEqual(resources.map((r) => r.uri).sort(), [
+    'board-doc://example',
+    'board-doc://guide',
     'board-spec://example',
     'board-spec://schema',
   ]);
+  const guide = await client.readResource({ uri: 'board-doc://guide' });
+  const guideText = guide.contents[0];
+  assert.ok(guideText && 'text' in guideText);
+  assert.match(guideText.text, /wardley-beta/);
   const schema = await client.readResource({ uri: 'board-spec://schema' });
   const first = schema.contents[0];
   assert.ok(first && 'text' in first);
@@ -80,17 +86,28 @@ test('the prompt template asks for confirmation before building', async () => {
   assert.match(message.text, /Do not continue without my explicit yes/);
 });
 
-test('validate_board_spec answers over the wire with structured content', async () => {
+test('validate_board answers over the wire with structured content', async () => {
   const result = await client.callTool({
-    name: 'validate_board_spec',
+    name: 'validate_board',
     arguments: { spec: VALID_SPEC },
   });
   assert.equal(result.isError ?? false, false);
   assert.equal((result.structuredContent as { valid: boolean }).valid, true);
 });
 
+test('validate_board reads a Markdown document with a flowchart over the wire', async () => {
+  const result = await client.callTool({
+    name: 'validate_board',
+    arguments: {
+      document: '# Wire\n\n## Flow\n\n```mermaid\nflowchart LR\n  a[Start] --> b[End]\n```\n',
+    },
+  });
+  assert.equal(result.isError ?? false, false, JSON.stringify(result.content));
+  assert.equal((result.structuredContent as { valid: boolean }).valid, true);
+});
+
 test('invalid arguments come back as a tool error the model can read', async () => {
-  const result = await client.callTool({ name: 'validate_board_spec', arguments: { spec: 42 } });
+  const result = await client.callTool({ name: 'validate_board', arguments: { spec: 42 } });
   assert.equal(result.isError, true);
 });
 

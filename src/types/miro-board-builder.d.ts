@@ -70,6 +70,12 @@ declare module 'miro-board-builder' {
 
   export function validateBoard(raw: RawBoard, board: NormalizedBoard): ValidationResult;
 
+  /** Height a text needs at a given width, with the same heuristic as the text-fit check. */
+  export function estimateRequiredHeight(
+    html: string,
+    options: { fontSize?: number; width: number },
+  ): number;
+
   export interface Transport {
     request(method: string, path: string, body?: unknown): Promise<unknown>;
   }

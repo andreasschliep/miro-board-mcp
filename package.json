@@ -12,7 +12,8 @@
   "main": "dist/server.js",
   "files": [
     "dist",
-    "examples"
+    "examples",
+    "resources"
   ],
   "engines": {
     "node": ">=22.18"
@@ -29,13 +30,20 @@
     "inspect": "npx @modelcontextprotocol/inspector node dist/server.js"
   },
   "dependencies": {
+    "@dagrejs/dagre": "3.1.3",
+    "@mermaid-js/parser": "2.0.1",
     "@modelcontextprotocol/server": "2.4.0",
+    "js-yaml": "5.5.0",
+    "jsdom": "30.1.3",
+    "marked": "18.1.2",
+    "mermaid": "12.2.0",
     "miro-board-builder": "file:../miro-board-builder",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/client": "2.4.0",
+    "@types/jsdom": "21.1.7",
     "@types/node": "^22.20.5",
     "eslint": "^10.14.0",
     "prettier": "^3.10.0",

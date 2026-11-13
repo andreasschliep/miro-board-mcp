@@ -20,7 +20,8 @@ import {
 import { layoutFindings, type LayoutFinding } from './layout.ts';
 import { LIMITS } from './limits.ts';
 
-export type SpecErrorCode = 'empty' | 'too_large' | 'yaml' | 'include' | 'too_complex';
+export type SpecErrorCode =
+  'empty' | 'too_large' | 'yaml' | 'include' | 'too_complex' | 'two_sources';
 
 /** The spec cannot be read at all. Everything else is a validation finding. */
 export class SpecError extends Error {
@@ -36,9 +37,11 @@ export class SpecError extends Error {
 }
 
 export interface Finding {
-  /** JSON pointer into the spec; after `repeat` expansion for elements. */
+  /** JSON pointer into the spec (after `repeat` expansion), or "line N" for documents. */
   path: string;
   message: string;
+  /** Documents only: the Markdown line the finding is about. */
+  line?: number;
 }
 
 export interface TextFitFinding {
@@ -46,6 +49,8 @@ export interface TextFitFinding {
   element_index: number;
   text: string;
   deficit_px: number;
+  /** Documents only: the Markdown line of the block the element came from. */
+  line?: number;
 }
 
 export interface ValidationReport {
@@ -133,9 +138,13 @@ export function countNodes(value: unknown, limit: number): number {
   return count;
 }
 
-/** Steps 1-5 for one spec text. Throws SpecError only if the text cannot be read. */
+/** Steps 1-6 for one spec text. Throws SpecError only if the text cannot be read. */
 export function checkSpec(text: string, policy: SpecPolicy): CheckedSpec {
-  const raw = loadRaw(text);
+  return checkRaw(loadRaw(text), policy);
+}
+
+/** Steps 4-6 for a board in the generator's format, from YAML or from a document. */
+export function checkRaw(raw: RawBoard, policy: SpecPolicy): CheckedSpec {
   const parser = new BoardParser({ allowInclude: false });
 
   let board: NormalizedBoard | null = null;
