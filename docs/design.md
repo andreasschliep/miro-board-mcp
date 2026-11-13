@@ -197,7 +197,7 @@ Configuration is environment only: `MIRO_ACCESS_TOKEN` (required for `build_boar
 
 ## 11. Generator changes (approved 11 November 2026)
 
-Rule: the generator is not changed without approval. Both changes are implemented as version 1.1.0 on the local branch `mcp-support` of `miro-board-builder` and are not pushed yet. Until they are, this server uses the local checkout (`file:../miro-board-builder`); before the first push of this repository it pins the published commit.
+Rule: the generator is not changed without approval. Both changes are implemented as version 1.1.0 of `miro-board-builder`; with Andreas's approval they were published to its `main` branch on 13 November 2026 (commit `983ba03`, including the schema descriptions below). This server pins that commit as a git submodule in `vendor/miro-board-builder` and depends on it with `file:vendor/miro-board-builder`, because npm 12 refuses git and tarball dependencies.
 
 |     | Change                                                                                                                                    | Why                                                         | Size                      |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------- |
@@ -249,7 +249,7 @@ Build and run: `npm run build` (`tsc`) writes `dist/`; clients start `node dist/
 Answered on 11 November 2026:
 
 - Language: TypeScript (D7).
-- Generator changes A and B: approved; implemented locally as 1.1.0, push to the public repository only after a separate approval.
+- Generator changes A and B: approved; published as 1.1.0 on 13 November 2026 after a separate approval.
 - Limits: as in 9.3.
 - Existing boards: only through the allowlist (or created by this process).
 - Example resource: yes, `board-spec://example`.
