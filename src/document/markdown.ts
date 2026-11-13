@@ -62,9 +62,17 @@ function inlineHtml(tokens: Token[] | undefined, line: number, warnings: DocFind
         break;
       case 'link': {
         const label = inlineHtml(token.tokens, line, warnings);
-        html += /^https:\/\//.test(token.href)
-          ? `<a href="${escapeHtml(token.href)}">${label}</a>`
-          : label;
+        if (/^https:\/\//.test(token.href)) {
+          html += `<a href="${escapeHtml(token.href)}">${label}</a>`;
+        } else {
+          if (/^http:\/\//.test(token.href)) {
+            warnings.push({
+              line,
+              message: `link ${token.href} is dropped, only its text is kept: boards keep https links only.`,
+            });
+          }
+          html += label;
+        }
         break;
       }
       case 'image':
@@ -86,20 +94,51 @@ function inlineHtml(tokens: Token[] | undefined, line: number, warnings: DocFind
   return html;
 }
 
+/** Longer texts still fit, but Miro shrinks the font of a sticky note until they do. */
+export const STICKY_MAX_CHARS = 140;
+
+function plainLength(html: string): number {
+  return html
+    .replace(/<br>/g, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&[a-z]+;/g, ' ').length;
+}
+
 function listItems(list: Tokens.List, line: number, warnings: DocFinding[]): string[] {
+  let itemLine = line;
   return list.items.map((item, index) => {
+    const at = itemLine;
+    itemLine += (item.raw.match(/\n/g) ?? []).length;
     const prefix = list.ordered ? `${Number(list.start || 1) + index}. ` : '';
     const parts: string[] = [];
     for (const token of item.tokens) {
       if (token.type === 'list') {
-        for (const child of listItems(token as Tokens.List, line, warnings))
-          parts.push(`• ${child}`);
+        for (const child of listItems(token as Tokens.List, at + 1, [])) parts.push(`• ${child}`);
       } else if (token.type === 'text' || token.type === 'paragraph') {
-        parts.push(inlineHtml((token as Tokens.Text).tokens, line, warnings));
+        parts.push(inlineHtml((token as Tokens.Text).tokens, at, warnings));
       }
     }
-    return prefix + parts.join('<br>');
+    const content = prefix + parts.join('<br>');
+    const length = plainLength(content);
+    if (length > STICKY_MAX_CHARS) {
+      warnings.push({
+        line: at,
+        message:
+          `sticky note has ${length} characters; Miro shrinks the font to fit. Keep it under ` +
+          `${STICKY_MAX_CHARS} characters, or write the text as a paragraph.`,
+      });
+    }
+    return content;
   });
+}
+
+/** A fenced block is closed when its raw text ends with a fence at least as long as the opening one. */
+function isClosed(raw: string): boolean {
+  const open = /^ {0,3}(`{3,}|~{3,})/.exec(raw)?.[1];
+  if (!open) return true; // indented code block
+  const lines = raw.replace(/\n+$/, '').split('\n');
+  const last = (lines.at(-1) ?? '').trim();
+  return lines.length > 1 && last.startsWith(open) && /^[`~]+$/.test(last) && last[0] === open[0];
 }
 
 export function parseDocument(source: string): DocModel {
@@ -163,6 +202,15 @@ export function parseDocument(source: string): DocModel {
         break;
       case 'code': {
         const code = token as Tokens.Code;
+        if (!isClosed(code.raw)) {
+          errors.push({
+            line: at,
+            message:
+              'the code block that starts here is never closed with ```; everything after it, ' +
+              'including later frames, was read as code. Close it.',
+          });
+          break;
+        }
         if (isMermaid(code)) {
           addBlock({ kind: 'mermaid', line: at, codeLine: at + 1, code: code.text });
         } else {
@@ -201,6 +249,18 @@ export function parseDocument(source: string): DocModel {
       line: 1,
       message: 'the document has no content; write one "## Heading" per frame.',
     });
+  }
+  const firstLine = new Map<string, number>();
+  for (const frame of frames) {
+    const seen = firstLine.get(frame.title);
+    if (seen !== undefined) {
+      warnings.push({
+        line: frame.line,
+        message: `frame title "${frame.title}" is used twice (also line ${seen}); give each frame its own title.`,
+      });
+    } else {
+      firstLine.set(frame.title, frame.line);
+    }
   }
   for (const frame of frames) {
     if (frame.blocks.length === 0) {

@@ -41,6 +41,8 @@ export interface Diagram {
   height: number;
   errors: DocFinding[];
   warnings: DocFinding[];
+  /** Document line of the statement each element came from, when the diagram knows it. */
+  sourceLines?: Map<ElementSpec, number>;
 }
 
 const HTML_ESCAPES: Record<string, string> = {

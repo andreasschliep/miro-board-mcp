@@ -34,7 +34,8 @@ function describe(report: ValidationReport, isSpec: boolean): string {
     : '';
   if (report.valid) {
     const summary =
-      `Valid: ${frames} frames, ${spec_elements} board elements, ` +
+      `Valid: ${frames} frames, ${spec_elements} elements and connectors ` +
+      '(the title bar of each frame is added later and not counted), ' +
       `${report.warnings.length} warnings, ${report.text_fit.length} text-fit warnings, ` +
       `${report.layout.length} layout warnings.${warnings}`;
     if (report.layout.length === 0) return `${summary}\nNext: preview_board.`;

@@ -276,3 +276,115 @@ test('the Wardley example in the guide is valid', async () => {
   const map = await wardleyDiagram(block, 1, 'g');
   assert.deepEqual(map.errors, []);
 });
+
+// Findings from the fault test of the second Markdown run (20 deliberate mistakes).
+
+test('Wardley values above 1 are errors with their line, and other findings still come', async () => {
+  const { report } = await checkDocument(
+    '# B\n\n## Map\n\n```mermaid\nwardley-beta\nanchor User [1.20, 0.50]\ncomponent Docs [0.55, 0.45]\nUser -> Nobody\nevolve Docs 1.40\n```\n',
+    policy,
+  );
+  assert.equal(report.valid, false);
+  assert.deepEqual(
+    report.errors.map((e) => e.line),
+    [7, 9, 10],
+  );
+  assert.match(report.errors[0]?.message ?? '', /visibility 1\.2 is outside 0 to 1/);
+  assert.match(report.errors[1]?.message ?? '', /"Nobody" is not declared/);
+});
+
+test('an unquoted name with an umlaut is reported on its line with the fix', async () => {
+  const map = await wardleyDiagram(
+    'wardley-beta\ncomponent A [0.5, 0.5]\ncomponent Zugänge [0.3, 0.7]\n',
+    10,
+    'q',
+  );
+  assert.equal(map.errors[0]?.line, 12);
+  assert.match(map.errors[0]?.message ?? '', /needs double quotes, e\.g\. component "Zugänge"/);
+});
+
+test('evolve on a pipeline part is left out, as Mermaid does, with a warning', async () => {
+  const map = await wardleyDiagram(
+    'wardley-beta\ncomponent Teams [0.5, 0.5]\npipeline Teams {\n  component Alpha [0.2]\n}\nevolve Alpha 0.8\n',
+    1,
+    'e',
+  );
+  assert.deepEqual(map.errors, []);
+  assert.equal(map.warnings[0]?.line, 6);
+  assert.equal(map.elements.filter((e) => e.strokeStyle === 'dashed').length, 0);
+});
+
+test('a layout warning in a map points to the statement and names the element', async () => {
+  const { report } = await checkDocument(
+    '# B\n\n## Map\n\n```mermaid\nwardley-beta\ncomponent A [0.5, 0.5]\ncomponent A component with a really long name at the edge [0.5, 0.99]\n```\n',
+    policy,
+  );
+  const finding = report.layout[0];
+  assert.equal(finding?.line, 8);
+  assert.equal(finding?.path, 'line 8');
+  assert.match(finding?.message ?? '', /^text "A component with a really lon…" extends/);
+});
+
+test('flowchart: an unclosed bracket is reported on its own line, not on a later one', async () => {
+  const chart = await flowchartDiagram(
+    'flowchart TD\n  a --> b{Ready?}\n  b -->|no| c[Fix it\n  c --> a\n  b -->|yes| d[Done]\n',
+    20,
+    'b',
+  );
+  assert.equal(chart.errors.length, 1);
+  assert.equal(chart.errors[0]?.line, 22);
+  assert.match(chart.errors[0]?.message ?? '', /opens "\[" but does not close it/);
+});
+
+test('flowchart: click, colour names and very long labels are warnings with their line', async () => {
+  const chart = await flowchartDiagram(
+    'flowchart LR\n  a[' +
+      'x'.repeat(90) +
+      '] --> b[Done]\n  style b fill:green\n  click b "https://example.com"\n',
+    1,
+    'w',
+  );
+  assert.deepEqual(chart.errors, []);
+  assert.deepEqual(
+    chart.warnings.map((w) => [w.line, w.message.split(':')[1]?.trim().split(' ')[0]]),
+    [
+      [3, 'fill'],
+      [4, '"click'],
+      [2, 'node'],
+    ],
+  );
+});
+
+test('Markdown: http links, long sticky notes, open code blocks and duplicate titles', async () => {
+  const { report } = await checkDocument(
+    '# B\n\n## A\n\nSee [wiki](http://example.com).\n\n- ' +
+      'y'.repeat(150) +
+      '\n\n## A\n\nText\n\n## C\n\n```mermaid\nflowchart LR\n  a --> b\n\n## D\n\nlost\n',
+    policy,
+  );
+  assert.deepEqual(
+    report.warnings.map((w) => w.line),
+    // 13: frame C is empty, because the open code block swallowed its content.
+    [5, 7, 9, 13],
+  );
+  assert.match(report.warnings[0]?.message ?? '', /http:\/\/example\.com is dropped/);
+  assert.match(report.warnings[1]?.message ?? '', /sticky note has 150 characters/);
+  assert.match(report.warnings[2]?.message ?? '', /"A" is used twice \(also line 3\)/);
+  assert.equal(report.errors[0]?.line, 15);
+  assert.match(report.errors[0]?.message ?? '', /never closed/);
+});
+
+test('a document with only a title gives one error with a line, not a schema error', async () => {
+  const { report } = await checkDocument('# Only a title\n', policy);
+  assert.deepEqual(
+    report.errors.map((e) => e.path),
+    ['line 1'],
+  );
+});
+
+test('the preview says that every frame count includes its title bar', async () => {
+  const result = await previewBoard({ document: DOC }, testDeps());
+  const text = result.content.map((c) => ('text' in c ? c.text : '')).join('\n');
+  assert.match(text, /\(incl\. 4 title bars\)/);
+  assert.match(text, /elements incl\. title bar/);
+});

@@ -58,6 +58,17 @@ function range(b: Bounds): string {
   return `x ${-b.halfW}..${b.halfW}, y ${-b.halfH}..${b.halfH}`;
 }
 
+/** "text "Dokumentation"": the element type and the start of its text, for messages. */
+function describeElement(element: ElementSpec): string {
+  const content = String(element.content ?? element.title ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&[a-z]+;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!content) return element.type;
+  return `${element.type} "${content.length > 30 ? `${content.slice(0, 29)}…` : content}"`;
+}
+
 function checkElement(
   element: ElementSpec,
   offset: { x: number; y: number },
@@ -90,10 +101,10 @@ function checkElement(
 
   const beyond = Math.max(-b.halfW - left, right - b.halfW, -b.halfH - top, bottom - b.halfH);
   if (beyond > 0) {
-    return `${element.type} extends ${Math.round(beyond)} units beyond the frame edge (${range(b)}).`;
+    return `${describeElement(element)} extends ${Math.round(beyond)} units beyond the frame edge (${range(b)}).`;
   }
   if (b.titleBarBottom !== null && top < b.titleBarBottom) {
-    return `${element.type} overlaps the title bar (the top ${TITLE_BAR_HEIGHT} units of the frame).`;
+    return `${describeElement(element)} overlaps the title bar (the top ${TITLE_BAR_HEIGHT} units of the frame).`;
   }
   return null;
 }

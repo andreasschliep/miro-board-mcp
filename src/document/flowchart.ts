@@ -107,6 +107,69 @@ const CAPS: Record<string, { start: string; end: string }> = {
   double_arrow_cross: { start: 'none', end: 'none' },
 };
 
+/** Longer labels still fit, because the box grows; but the chart gets hard to read. */
+export const NODE_LABEL_MAX_CHARS = 80;
+
+/**
+ * Checks Mermaid would either reject with a message about a later line (an unclosed
+ * bracket) or accept without effect on the board (click, colours that are not hex).
+ */
+function lineChecks(
+  codeLines: string[],
+  firstLine: number,
+): { errors: DocFinding[]; warnings: DocFinding[] } {
+  const errors: DocFinding[] = [];
+  const warnings: DocFinding[] = [];
+  const pairs: Array<[string, string]> = [
+    ['[', ']'],
+    ['(', ')'],
+    ['{', '}'],
+  ];
+  codeLines.forEach((raw, index) => {
+    const line = firstLine + index;
+    const text = raw.trim();
+    if (!text || text.startsWith('%%')) return;
+    if (/^click\s/.test(text)) {
+      warnings.push({
+        line,
+        message: `flowchart: "${text}" is not drawn; shapes on the board get no links.`,
+      });
+      return;
+    }
+    if (/^(classDef|style)\s/.test(text)) {
+      for (const [, property, value] of text.matchAll(/\b(fill|stroke|color)\s*:\s*([^,;\s]+)/g)) {
+        if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value ?? '')) {
+          warnings.push({
+            line,
+            message: `flowchart: ${property}:${value} is not a hex colour; the default is used. Write e.g. ${property}:#2b8a3e.`,
+          });
+        }
+      }
+      return;
+    }
+    // Brackets inside quotes, edge labels |...| and asymmetric shapes id>text] do not count.
+    const bare = text
+      .replace(/"[^"]*"/g, '')
+      .replace(/\|[^|]*\|/g, '')
+      .replace(/(\w)>[^\]]*\]/g, '$1');
+    for (const [open, close] of pairs) {
+      const opened = bare.split(open).length - 1;
+      const closed = bare.split(close).length - 1;
+      if (opened !== closed) {
+        errors.push({
+          line,
+          message:
+            opened > closed
+              ? `flowchart: "${text}" opens "${open}" but does not close it. Add "${close}" on this line.`
+              : `flowchart: "${text}" has a "${close}" without a matching "${open}".`,
+        });
+        break;
+      }
+    }
+  });
+  return { errors, warnings };
+}
+
 const DIRECTIONS: Record<string, string> = { TB: 'TB', TD: 'TB', BT: 'BT', LR: 'LR', RL: 'RL' };
 const FONT = 16;
 const COLOURS = { fill: '#FFFFFF', stroke: '#343A40', text: '#212529', edge: '#495057' };
@@ -172,6 +235,19 @@ export async function flowchartDiagram(
   const warnings: DocFinding[] = [];
   const { body, lineOffset } = mermaidFrontMatter(code);
   const firstLine = codeLine + lineOffset;
+  const codeLines = body.split('\n');
+
+  const checked = lineChecks(codeLines, firstLine);
+  warnings.push(...checked.warnings);
+  if (checked.errors.length > 0) {
+    return { elements: [], width: 0, height: 0, errors: checked.errors, warnings };
+  }
+  /** Line where a node is first given a label or shape, for findings about that node. */
+  const nodeLine = (id: string): number => {
+    const pattern = new RegExp(`(^|[^\\w-])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[[({>]`);
+    const index = codeLines.findIndex((l) => pattern.test(l));
+    return index >= 0 ? firstLine + index : firstLine;
+  };
 
   const mermaid = await loadMermaid();
   let parsed: {
@@ -215,9 +291,12 @@ export async function flowchartDiagram(
         .split('\n')
         .filter((l) => l.trim() && !/^[-\s^]*$/.test(l))
         .slice(-1)[0] ?? message;
+    const codeText = at ? (codeLines[Number(at[1]) - 1] ?? '').trim() : '';
     errors.push({
       line: firstLine + (at ? Number(at[1]) - 1 : 0),
-      message: `flowchart: ${detail.trim()}`,
+      message:
+        `flowchart could not read ${codeText ? `"${codeText}"` : 'this block'}. ` +
+        `Check brackets, quotes and arrows on this line and the one before. (Mermaid: ${detail.trim()})`,
     });
     return { elements: [], width: 0, height: 0, errors, warnings };
   }
@@ -250,7 +329,7 @@ export async function flowchartDiagram(
     const shape = SHAPES[vertex.type ?? 'square'];
     if (!shape)
       warnings.push({
-        line: firstLine,
+        line: nodeLine(id),
         message: `flowchart: node "${id}" has shape "${vertex.type}", drawn as a rectangle.`,
       });
     const styles = [
@@ -258,6 +337,15 @@ export async function flowchartDiagram(
       ...(vertex.styles ?? []),
     ];
     const lines = labelLines(vertex.text, id);
+    const labelLength = lines.join(' ').length;
+    if (labelLength > NODE_LABEL_MAX_CHARS) {
+      warnings.push({
+        line: nodeLine(id),
+        message:
+          `flowchart: node "${id}" has a label of ${labelLength} characters; the box grows ` +
+          `with it. Keep labels under ${NODE_LABEL_MAX_CHARS} characters and put details into a text block.`,
+      });
+    }
     const resolved = shape ?? 'rectangle';
     nodes.set(id, {
       lines,

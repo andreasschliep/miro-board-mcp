@@ -150,15 +150,27 @@ export async function wardleyDiagram(
     )) as unknown as WardleyAst;
   } catch (error) {
     const result = (error as ParseErrorShape).result;
+    // A character the lexer cannot read (an umlaut in an unquoted name) is the real cause;
+    // the parser error that follows it only says what it found next.
     const first =
-      result?.parserErrors?.map((e) => ({ line: e.token?.startLine, message: e.message }))[0] ??
-      result?.lexerErrors?.map((e) => ({ line: e.line, message: e.message }))[0];
+      result?.lexerErrors?.map((e) => ({ line: e.line, message: e.message }))[0] ??
+      result?.parserErrors?.map((e) => ({ line: e.token?.startLine, message: e.message }))[0];
+    const codeText = first?.line ? (body.split('\n')[first.line - 1] ?? '').trim() : '';
     errors.push({
       line: firstLine + (first?.line ? first.line - 1 : 0),
-      message: `wardley-beta: ${first?.message ?? (error as Error).message}`,
+      message:
+        `wardley-beta could not read ${codeText ? `"${codeText}"` : 'this block'}: ` +
+        `${(first?.message ?? (error as Error).message).replace(/ at offset: \d+, skipped \d+ characters\.?/, '').replace(/([^.!?])$/, '$1.')}` +
+        (needsQuotes(codeText)
+          ? ' A name with umlauts or one of : , ? needs double quotes, e.g. component "Zugänge" [0.30, 0.70].'
+          : ''),
     });
-    return { elements: [], width: 0, height: 0, errors, warnings };
+    return { elements: [], width: 0, height: 0, errors, warnings, sourceLines: new Map() };
   }
+
+  // Out-of-range values are errors; drawing continues (clamped) so that the other
+  // findings of this block are reported in the same run.
+  errors.push(...rangeErrors(ast, lineOf));
 
   const theme = themeFrom(config);
   const width = clamp(ast.size?.width ?? DEFAULT_SIZE.width, 800, 3000);
@@ -170,9 +182,22 @@ export async function wardleyDiagram(
   const x = (evolution: number) => left + clamp(evolution, 0, 1) * (right - left);
   const y = (visibility: number) => bottom - clamp(visibility, 0, 1) * (bottom - top);
 
-  const background: ElementSpec[] = [];
-  const nodes: ElementSpec[] = [];
-  const connectors: ElementSpec[] = [];
+  // Every element remembers the line of the statement it came from, so that a layout
+  // warning can point to its cause rather than to the start of the block.
+  const sourceLines = new Map<ElementSpec, number>();
+  let currentLine = firstLine;
+  const tracked = (): ElementSpec[] => {
+    const list: ElementSpec[] = [];
+    const push = list.push.bind(list);
+    list.push = (...items: ElementSpec[]) => {
+      for (const item of items) sourceLines.set(item, currentLine);
+      return push(...items);
+    };
+    return list;
+  };
+  const background = tracked();
+  const nodes = tracked();
+  const connectors = tracked();
   const refs = new Map<string, { ref: string; x: number; y: number }>();
   let counter = 0;
   const nextRef = () => `${refPrefix}-w${++counter}`;
@@ -238,6 +263,7 @@ export async function wardleyDiagram(
 
   // Anchors: bold labels without a dot; links attach to an invisible box around them.
   for (const anchor of ast.anchors) {
+    currentLine = lineOf(anchor);
     const ref = nextRef();
     const w = textWidth(anchor.name, 15) + 10;
     refs.set(anchor.name, { ref, x: x(anchor.evolution), y: y(anchor.visibility) });
@@ -262,6 +288,7 @@ export async function wardleyDiagram(
   const parentAt = new Map<string, { x: number; y: number }>();
   const pipelineParts = new Set<string>();
   for (const pipeline of ast.pipelines) {
+    currentLine = lineOf(pipeline);
     const parent = ast.components.find((c) => c.name === pipeline.parent);
     if (!parent) {
       errors.push({
@@ -295,6 +322,7 @@ export async function wardleyDiagram(
     const rowEnds: number[] = [];
     let previous: string | null = null;
     for (const part of parts) {
+      currentLine = lineOf(part);
       const ref = nextRef();
       const px = x(part.evolution);
       refs.set(part.name, { ref, x: px, y: lineY });
@@ -333,6 +361,7 @@ export async function wardleyDiagram(
 
   // Components: a dot and a label to its right (or where `label [x, y]` puts it).
   for (const component of ast.components) {
+    currentLine = lineOf(component);
     const moved = parentAt.get(component.name);
     const cx = moved?.x ?? x(component.evolution);
     const cy = moved?.y ?? y(component.visibility);
@@ -386,6 +415,7 @@ export async function wardleyDiagram(
 
   // Dependencies. Like Mermaid, a link from a pipeline part to its own parent is not drawn.
   for (const link of ast.links) {
+    currentLine = lineOf(link);
     if (
       pipelineParts.has(`${link.to}\u0000${link.from}`) ||
       pipelineParts.has(`${link.from}\u0000${link.to}`)
@@ -419,7 +449,19 @@ export async function wardleyDiagram(
   }
 
   // Evolution: a red ghost at the target and a dashed arrow towards it.
+  const partNames = new Set(ast.pipelines.flatMap((p) => p.components.map((c) => c.name)));
   for (const evolve of ast.evolves) {
+    currentLine = lineOf(evolve);
+    if (partNames.has(evolve.component)) {
+      // Mermaid draws no evolution for a pipeline part; the board shows the same map.
+      warnings.push({
+        line: currentLine,
+        message:
+          `evolve "${evolve.component}" is not drawn: Mermaid draws no evolution for a part ` +
+          'of a pipeline, so the board leaves it out too. Write it as a note instead.',
+      });
+      continue;
+    }
     const source = refs.get(evolve.component);
     if (!source) {
       errors.push({
@@ -457,6 +499,7 @@ export async function wardleyDiagram(
   }
 
   for (const note of ast.notes) {
+    currentLine = lineOf(note);
     const w = Math.min(textWidth(note.text, 14), 360);
     nodes.push(
       text(
@@ -472,6 +515,7 @@ export async function wardleyDiagram(
   }
 
   for (const annotation of ast.annotation) {
+    currentLine = lineOf(annotation);
     nodes.push({
       type: 'shape',
       shape: 'circle',
@@ -507,6 +551,7 @@ export async function wardleyDiagram(
     [ast.deaccelerators, 'left_arrow'],
   ] as const) {
     for (const item of list) {
+      currentLine = lineOf(item);
       nodes.push({
         type: 'shape',
         shape,
@@ -522,7 +567,14 @@ export async function wardleyDiagram(
     }
   }
 
-  return { elements: [...background, ...nodes, ...connectors], width, height, errors, warnings };
+  return {
+    elements: [...background, ...nodes, ...connectors],
+    width,
+    height,
+    errors,
+    warnings,
+    sourceLines,
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -587,4 +639,63 @@ function text(
 
 function round(value: number): number {
   return Math.round(value);
+}
+
+/** Text left of a quoted name or comment that a Wardley name cannot hold without quotes. */
+export function needsQuotes(codeLine: string): boolean {
+  if (/^\s*title\b/.test(codeLine)) return false;
+  const bare = codeLine.replace(/"([^"\\]|\\.)*"/g, '').replace(/%%.*$/, '');
+  const rest = bare.replace(/\[[^\]]*\]/g, '');
+  return /[:,?]/.test(rest) || [...rest].some((c) => c.charCodeAt(0) > 127);
+}
+
+/** Coordinates in wardley-beta are [visibility, evolution], both from 0 to 1. */
+function rangeErrors(ast: WardleyAst, lineOf: (node: Located) => number): DocFinding[] {
+  const errors: DocFinding[] = [];
+  const check = (node: Located, name: string, values: Array<[string, number]>) => {
+    for (const [what, value] of values) {
+      if (!(value >= 0 && value <= 1)) {
+        errors.push({
+          line: lineOf(node),
+          message:
+            `"${name}": ${what} ${value} is outside 0 to 1. Wardley coordinates are ` +
+            '[visibility, evolution], both from 0 to 1.',
+        });
+      }
+    }
+  };
+  for (const n of [...ast.anchors, ...ast.components]) {
+    check(n, n.name, [
+      ['visibility', n.visibility],
+      ['evolution', n.evolution],
+    ]);
+  }
+  for (const pipeline of ast.pipelines) {
+    for (const part of pipeline.components) check(part, part.name, [['evolution', part.evolution]]);
+  }
+  for (const evolve of ast.evolves)
+    check(evolve, evolve.component, [['evolve target', evolve.target]]);
+  for (const note of ast.notes) {
+    check(note, note.text, [
+      ['visibility', note.visibility],
+      ['evolution', note.evolution],
+    ]);
+  }
+  for (const a of ast.annotation)
+    check(a, `annotation ${a.number}`, [
+      ['position', a.x],
+      ['position', a.y],
+    ]);
+  for (const a of ast.annotations)
+    check(a, 'annotations', [
+      ['position', a.x],
+      ['position', a.y],
+    ]);
+  for (const a of [...ast.accelerators, ...ast.deaccelerators]) {
+    check(a, a.name, [
+      ['position', a.x],
+      ['position', a.y],
+    ]);
+  }
+  return errors;
 }

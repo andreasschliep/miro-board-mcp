@@ -60,13 +60,19 @@ export async function previewBoard(input: SourceInput, deps: ServerDeps): Promis
     );
   }
 
+  // The generator adds a title bar to every frame unless the board turns it off; it is
+  // counted as an element here, which is why a frame has one more than its content.
+  const style = (board.style ?? {}) as { headerBar?: boolean };
+  const titleBars =
+    style.headerBar === false ? 0 : board.frames.filter((f) => f.headerBar !== false).length;
   const lines = plan.frames.map(
     (f) =>
-      `${f.order}. ${f.title}${f.phase ? ` [${f.phase}]` : ''}: ${f.elements} elements, ` +
-      `${f.width} x ${f.height} at (${f.x}, ${f.y})`,
+      `${f.order}. ${f.title}${f.phase ? ` [${f.phase}]` : ''}: ${f.elements} elements` +
+      `${titleBars > 0 ? ' incl. title bar' : ''}, ${f.width} x ${f.height} at (${f.x}, ${f.y})`,
   );
   const text =
-    `Preview of "${plan.board_name}": ${plan.totals.frames} frames, ${plan.totals.elements} elements, ` +
+    `Preview of "${plan.board_name}": ${plan.totals.frames} frames, ${plan.totals.elements} elements ` +
+    `(incl. ${titleBars} title bars), ` +
     `${plan.totals.connectors} connectors, ${plan.totals.api_calls} Miro API calls ` +
     `(about ${plan.estimated_seconds} s).\n${lines.join('\n')}\n` +
     (report.layout.length > 0

@@ -166,7 +166,7 @@ export async function composeDocument(markdown: string): Promise<ComposedBoard> 
             typeof element.x === 'number' && typeof element.y === 'number'
               ? { ...element, x: Math.round(element.x), y: Math.round(element.y + centreY) }
               : element;
-          add(shifted, item.block.line);
+          add(shifted, item.diagram.sourceLines?.get(element) ?? item.block.line);
         }
       }
       cursorY += item.height + FRAME_LAYOUT.blockGap;

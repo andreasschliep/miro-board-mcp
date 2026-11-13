@@ -8,6 +8,10 @@ import { checkRaw, SpecError, type CheckedSpec, type Finding, type SpecPolicy } 
 import { composeDocument } from './compose.ts';
 import type { DocFinding } from './model.ts';
 
+function fromDoc(f: DocFinding): Finding {
+  return { path: `line ${f.line}`, message: f.message, line: f.line };
+}
+
 export const GUIDE_HINT = 'Read the resource board-doc://guide for the format.';
 
 export async function checkDocument(markdown: string, policy: SpecPolicy): Promise<CheckedSpec> {
@@ -28,6 +32,22 @@ export async function checkDocument(markdown: string, policy: SpecPolicy): Promi
   }
 
   const composed = await composeDocument(markdown);
+  const byLine = (a: Finding, b: Finding) => (a.line ?? 0) - (b.line ?? 0);
+  if ((composed.raw.frames as unknown[]).length === 0) {
+    // Nothing to build: the document findings say why; the generator's schema errors
+    // about an empty frame list would only repeat it without a line.
+    return {
+      report: {
+        valid: false,
+        errors: composed.errors.map(fromDoc).sort(byLine),
+        warnings: composed.warnings.map(fromDoc).sort(byLine),
+        text_fit: [],
+        layout: [],
+        summary: { frames: 0, spec_elements: 0 },
+      },
+      board: null,
+    };
+  }
   const checked = checkRaw(composed.raw, policy);
   const frameIds = (composed.raw.frames as Array<{ id: string }>).map((frame) => frame.id);
 
@@ -37,23 +57,22 @@ export async function checkDocument(markdown: string, policy: SpecPolicy): Promi
     const frame = /^\/frames\/(\d+)/.exec(path)?.[1];
     return frame === undefined ? undefined : composed.frameLines[Number(frame)];
   };
-  const fromDoc = (f: DocFinding): Finding => ({
-    path: `line ${f.line}`,
-    message: f.message,
-    line: f.line,
-  });
   const located = (f: Finding): Finding => {
     const line = lineFor(f.path);
     return line ? { path: `line ${line}`, message: f.message, line } : f;
   };
 
   const report = checked.report;
-  const errors = [...composed.errors.map(fromDoc), ...report.errors.map(located)];
-  const warnings = [...composed.warnings.map(fromDoc), ...report.warnings.map(located)];
-  const layout = report.layout.map((finding) => {
-    const line = lineFor(finding.path);
-    return line ? { ...finding, line } : finding;
-  });
+  const errors = [...composed.errors.map(fromDoc), ...report.errors.map(located)].sort(byLine);
+  const warnings = [...composed.warnings.map(fromDoc), ...report.warnings.map(located)].sort(
+    byLine,
+  );
+  const layout = report.layout
+    .map((finding) => {
+      const line = lineFor(finding.path);
+      return line ? { ...finding, path: `line ${line}`, line } : finding;
+    })
+    .sort((a, b) => (a.line ?? 0) - (b.line ?? 0));
   const textFit = report.text_fit.map((finding) => {
     const frame = frameIds.indexOf(finding.frame_id);
     // The generator counts the title bar it adds as element 0.
