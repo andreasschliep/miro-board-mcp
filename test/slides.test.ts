@@ -356,8 +356,10 @@ test('preview of a slides document counts the logo uploads and has no title bars
   const preview = data<{ totals: { api_calls: number; frames: number } }>(result);
   assert.equal(preview.totals.frames, 4);
   assert.doesNotMatch(text(result), /title bar/);
+  assert.match(text(result), /4 frames, \d+ elements, \d+ connectors/);
   const validated = await validateBoard({ document: DOC }, deps);
   assert.doesNotMatch(text(validated), /title bar/);
+  assert.match(text(validated), /elements and connectors, 0 warnings/);
 });
 
 test('slide logos come from MIRO_SLIDE_LOGO_LEFT and _RIGHT: an absolute path or an https URL', () => {

@@ -72,8 +72,8 @@ export async function previewBoard(input: SourceInput, deps: ServerDeps): Promis
       `${titleBars > 0 ? ' incl. title bar' : ''}, ${f.width} x ${f.height} at (${f.x}, ${f.y})`,
   );
   const text =
-    `Preview of "${plan.board_name}": ${plan.totals.frames} frames, ${plan.totals.elements} elements ` +
-    `${titleBars > 0 ? `(incl. ${titleBars} title bars)` : ''}, ` +
+    `Preview of "${plan.board_name}": ${plan.totals.frames} frames, ${plan.totals.elements} elements` +
+    `${titleBars > 0 ? ` (incl. ${titleBars} title bars)` : ''}, ` +
     `${plan.totals.connectors} connectors, ${plan.totals.api_calls} Miro API calls ` +
     `(about ${plan.estimated_seconds} s).\n${lines.join('\n')}\n` +
     (report.layout.length > 0
