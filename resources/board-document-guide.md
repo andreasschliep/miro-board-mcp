@@ -17,6 +17,38 @@ Bold, italic and https links in text are kept; http links lose their link and ke
 
 Keep a sticky note under 140 characters; Miro shrinks the font of longer ones. Close every code block with ```; an open one swallows the rest of the document.
 
+## Theme: slides
+
+Front matter at the very top chooses the look. Without `theme` the board looks as described above.
+
+```markdown
+---
+theme: slides
+title: Clear code reviews
+kicker: FOCUS TOPIC
+subtitle: What makes feedback helpful
+tagline: A one-hour session
+byline: 1 January 2030, Example Team
+---
+```
+
+With `theme: slides` every frame is a slide of the same fixed size (6078 x 4332); the content never makes it grow.
+
+| Markdown                                           | On the slide                                                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `title`, `kicker`, `subtitle`, `tagline`, `byline` | a white title slide first; only `title` (or `# Name`) is needed                                         |
+| `## Heading`                                       | a black slide; the heading top left in light violet                                                     |
+| paragraphs, `###`, quotes                          | white text below the heading                                                                            |
+| a `> quote` as the only block of a frame           | a statement slide: one large centred sentence, no heading                                               |
+| list `- item`                                      | dark cards with a white border, three per row                                                           |
+| task list `- [ ] item` (or `- [x]`)                | yellow sticky notes: templates for participants to copy                                                 |
+| ` ```mermaid ` flowchart                           | dark boxes with white borders and text, white arrows; `classDef` colours stay; scaled to the free space |
+| ` ```mermaid ` wardley-beta                        | the map in its own colours on a white panel                                                             |
+
+Write `- [ ]` only for what participants should fill in, such as "Your sticky: …"; everything else in a list becomes a card. A list may mix both; each run of cards or sticky notes stays in document order.
+
+Every content slide gets the footer logos the server is configured with. A slide whose content does not fit gets a layout warning "slide … is too full" on its heading line: split it into two frames with a second `## heading`. Do not shrink or cut the content to make it fit. On the title slide, a text that runs into the next one or off the slide gets a warning as well; shorten it or move words into `subtitle` or `tagline`.
+
 ## Flowchart
 
 The official Mermaid parser reads the block.

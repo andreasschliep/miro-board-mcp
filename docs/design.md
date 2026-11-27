@@ -163,8 +163,9 @@ The generator's HTTP transport is reused unchanged: at least 650 ms between requ
 | T7  | `image` and `embed` place arbitrary external URLs on a board            | rejected by default; allowed only for hosts in `MIRO_MCP_ALLOWED_URL_HOSTS`                                                        |
 | T8  | Token leaks                                                             | token only from `MIRO_ACCESS_TOKEN`, never in results or logs; error messages contain method, path and status, not headers         |
 | T9  | Destructive actions                                                     | none exposed: no delete, no clear                                                                                                  |
+| T10 | An image `file` in a spec uploads a local file (a key, a token) to Miro | only the slide logo files from the server environment may be uploaded; any other `file` is a validation error                      |
 
-Configuration is environment only: `MIRO_ACCESS_TOKEN` (required for `build_board` and `list_frames`), `MIRO_TEAM_ID`, `MIRO_MCP_ALLOWED_BOARD_IDS`, `MIRO_MCP_ALLOWED_URL_HOSTS`. `.env.example` carries placeholders. Locally the server can be started through `op run`, so the token comes from 1Password and is never written to a file.
+Configuration is environment only: `MIRO_ACCESS_TOKEN` (required for `build_board` and `list_frames`), `MIRO_TEAM_ID`, `MIRO_MCP_ALLOWED_BOARD_IDS`, `MIRO_MCP_ALLOWED_URL_HOSTS`, and for `theme: slides` `MIRO_SLIDE_LOGO_LEFT` and `MIRO_SLIDE_LOGO_RIGHT` (section 16). `.env.example` carries placeholders. Locally the server can be started through `op run`, so the token comes from 1Password and is never written to a file.
 
 ## 10. Design decisions
 
@@ -205,6 +206,13 @@ Rule: the generator is not changed without approval. Both changes are implemente
 | B   | `builder.build(boardId, board, { signal })` checks the signal between frames, and stops on 401, 403 and 404 instead of trying every frame | cancellation and "abort with partial result" (9.2)          | about 30 lines plus tests |
 
 Without approval the server would override the parser's internal `_schema()` method for A, and wrap the transport so that it fails every further call after the first fatal error for B. That works, but it depends on private internals.
+
+Approved on 27 November 2026 for `theme: slides` (section 16), as version 1.2.0 on the generator branch `image-upload-caption-style` (commit `72002f9`), not yet published:
+
+|     | Change                                                                                                                                                              | Why                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| C   | an `image` takes a local `file` (png, jpg, gif, svg) instead of a `url`; `MiroClient.createImageFromFile` and `HttpTransport.upload` send it as multipart/form-data | slide logos stay local files (D20)          |
+| D   | connector captions take `textColor` and `fontSize`; without them the payload is unchanged                                                                           | readable arrow labels on black slides (D24) |
 
 Approved with the phase 3 fixes on 12 November 2026, also on `mcp-support`: descriptions in `schema/board.schema.json` for element `x`, `y`, `toX`, `toY`, for `layout.startX`, `frameSpacing`, `rowSpacing`, for frame `row`, `col`, `x`, `y`, and for what `style.parentElements: false` means. Descriptions only; no behaviour changes.
 
@@ -369,3 +377,51 @@ Scope before 17 November: Wardley maps and flowcharts, then one end-to-end run.
 Also: findings are sorted by line; a document with only a title gives one error with a line instead of an additional schema error; `evolve` on a pipeline part is not drawn and gets a warning, because Mermaid does not draw it either (found while rendering a map with Mermaid 12.2).
 
 Not tested yet: `build_board` with `dry_run: false` and a wrong `confirm_hash` against Miro (covered by unit tests only).
+
+## 16. Theme: slides (approved and implemented, 27 November 2026)
+
+### 16.1 Why
+
+The board for a one-hour focus-topic webinar came out of the document mode in the default look: white frames sized to their content, a dark title bar, yellow sticky notes, text from 16 to 33. The webinar slides look different, and Andreas had to restyle the board by hand shortly before the session. The document mode now has a second look that produces boards in that slide style, chosen in the front matter; the default look does not change.
+
+### 16.2 The measured style
+
+The values come from a read-only query of a reference board through the REST API (frames, items, styles, positions relative to the frame centre). They live in one object, `SLIDES` in `src/document/theme.ts`; the composer (`src/document/slides.ts`) reads every colour, font and size from there.
+
+- Frames: 6078 x 4332 (the AME3 slide size, about A4 landscape), fixed, in a row 800 apart, no title bar.
+- Title slide: white; kicker orange, 130; title 300; an orange bar of 1400 x 36; subtitle 240; tagline 170; byline 150; all centred, Open Sans, at the measured heights.
+- Content slides: black (`#010101`); heading light violet (`#BC7AF5`), Arial 190, top left on a 330 margin; text white, Arial 140, up to 5200 wide; footer from y 1800 with the two logos at the measured positions.
+- A lone quote: a statement slide, white, Arial 380, 5300 wide, centred.
+- Cards in the AME3 style: fill `#151515`, white border 2, white text 70.
+
+### 16.3 Mapping
+
+| Markdown                                                        | `theme: slides`                                                                                                                     |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| front matter `title`, `kicker`, `subtitle`, `tagline`, `byline` | the white title slide, first                                                                                                        |
+| `## Heading`                                                    | black slide, heading top left                                                                                                       |
+| paragraphs, `###`, quotes                                       | white text below the heading                                                                                                        |
+| `> quote` as the only block                                     | statement slide                                                                                                                     |
+| list item                                                       | dark card, up to three per row, one height per run                                                                                  |
+| task item `- [ ]` / `- [x]`                                     | yellow sticky note, 640 wide                                                                                                        |
+| flowchart                                                       | nodes `#151515` with white border and text, `classDef` colours kept, white arrows and captions, scaled to the free space (2x to 4x) |
+| wardley-beta                                                    | the map in its own colours on a white panel, scaled (1.5x to 3.5x)                                                                  |
+| every content slide                                             | the logos from `MIRO_SLIDE_LOGO_LEFT` and `MIRO_SLIDE_LOGO_RIGHT`                                                                   |
+
+### 16.4 Decisions (Andreas, 27 November 2026)
+
+**D19 A theme is chosen in the front matter, the default stays.** Decision: `theme: slides` switches the composer; without it the code path is the old one. Alternative: style options per block. Reason: one word in the document, and a board either looks like a slide deck or like a workshop board. A golden test (`test/default-look.test.ts`) pins the composed board, the validation report, the spec hash and every planned Miro call of two documents to hashes taken before themes existed.
+
+**D20 Logos are uploaded from local files.** Decision: the generator uploads an `image` with `file` as multipart/form-data (change C); the server takes the logos from `MIRO_SLIDE_LOGO_LEFT` and `MIRO_SLIDE_LOGO_RIGHT`, each an absolute path or an https URL. Alternative: public https URLs only, which the generator could already do. Reason: the logos stay private files outside the repository and need no hosting. Because an uploaded file leaves the laptop, only these configured files may be uploaded (T10); the document cannot name a file. A missing logo is one warning, a broken one an error on the `theme` line. Whether Miro accepts SVG through the API is stated nowhere in its documentation; the first build shows it.
+
+**D21 Fonts as measured.** Decision: Open Sans on the title slide, Arial on content slides. Alternative: Open Sans everywhere, as the stand-in for the DST font. Reason: the goal is the look of the reference, and the final check compares against it; a change is one line in `SLIDES`.
+
+**D22 Task items are the only sticky syntax.** Decision: under `theme: slides`, `- [ ]` and `- [x]` become sticky notes, all other list items dark cards. Alternative: sticky notes for every list, as in the default look. Reason: on a slide most lists are content to read; sticky notes are templates for what participants write. In a loose list marked leaves `[ ]` in the text; the slide strips it, the default look keeps its old output.
+
+**D23 Logos on every content slide.** Decision: both logos on every content slide, none on the title slide, as on the reference; no option to turn them off. Alternative: logos only on chosen slides. Reason: two API calls per slide (about 1.3 s) are cheap next to a build that runs through a script anyway once it passes 80 calls.
+
+**D24 Caption colour and size in the generator.** Decision: connector `textColor` and `fontSize` (change D). Alternative: draw edge labels as separate white text. Reason: without it, Miro draws captions dark at size 14, invisible on black; separate texts would not move with their arrow.
+
+**D25 Fixed slides, warnings instead of shrinking.** Decision: content stacks below the heading in the safe area (330 margin, footer from y 1800); text sizes are fixed; diagrams take the height that is left, within their scale limits. What does not fit is one layout warning on the frame's heading line ("too full ... split it"); the generator's own edge warnings for that frame are dropped, one cause, one message. Alternative: shrink fonts until the content fits. Reason: slides with shrinking text get hard to read in a webinar; splitting keeps one idea per slide. Heights are the generator's text estimate, which errs on the safe side.
+
+**D26 Wardley maps on a white panel.** Decision: maps keep their colours and get a white rectangle behind them. Alternative: a dark map style. Reason: no current slide deck needs a map; the panel keeps a map readable with a few lines of code.
