@@ -7,24 +7,86 @@
 import { load } from 'js-yaml';
 import { Lexer, type Token, type Tokens } from 'marked';
 import { firstCodeLine } from './mermaid.ts';
-import { escapeHtml, type Block, type DocFinding, type DocFrame, type DocModel } from './model.ts';
+import {
+  escapeHtml,
+  type Block,
+  type DocFinding,
+  type DocFrame,
+  type DocModel,
+  type TitleSlideFields,
+} from './model.ts';
+import { THEME_NAMES, type ThemeName } from './theme.ts';
 
 const MERMAID_START = /^(wardley-beta|flowchart|graph)\b/;
 
-/** Front matter at the very top: "---", YAML, "---". Returns its lines and the title. */
-function splitFrontMatter(source: string): { body: string; title: string | null } {
+interface FrontMatter {
+  body: string;
+  title: string | null;
+  fields: Record<string, unknown>;
+  /** Document line of each top-level key, for findings about it. */
+  keyLines: Map<string, number>;
+}
+
+/** Front matter at the very top: "---", YAML, "---". Returns the fields and the body. */
+function splitFrontMatter(source: string): FrontMatter {
   const match = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/.exec(source);
-  if (!match) return { body: source, title: null };
-  let title: string | null = null;
+  if (!match) return { body: source, title: null, fields: {}, keyLines: new Map() };
+  let fields: Record<string, unknown> = {};
   try {
-    const data = load(match[1] ?? '') as { title?: unknown } | null;
-    if (data && typeof data.title === 'string') title = data.title;
+    const data = load(match[1] ?? '') as unknown;
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      fields = data as Record<string, unknown>;
+    }
   } catch {
     // Front matter that is not YAML is simply ignored; it is not part of the board.
   }
+  const keyLines = new Map<string, number>();
+  (match[1] ?? '').split('\n').forEach((text, index) => {
+    const key = /^([A-Za-z_][\w-]*)\s*:/.exec(text)?.[1];
+    if (key && !keyLines.has(key)) keyLines.set(key, index + 2);
+  });
+  const title = typeof fields.title === 'string' ? fields.title : null;
   // Keep the line count so that line numbers stay right.
   const blankLines = '\n'.repeat(match[0].split('\n').length - 1);
-  return { body: blankLines + source.slice(match[0].length), title };
+  return { body: blankLines + source.slice(match[0].length), title, fields, keyLines };
+}
+
+const TITLE_SLIDE_KEYS = ['kicker', 'subtitle', 'tagline', 'byline'] as const;
+
+/** theme and the title slide fields from the front matter. */
+function themeFields(
+  front: FrontMatter,
+  errors: DocFinding[],
+  warnings: DocFinding[],
+): { theme: ThemeName; themeLine: number; titleSlide: TitleSlideFields } {
+  const themeLine = front.keyLines.get('theme') ?? 1;
+  let theme: ThemeName = 'default';
+  const raw = front.fields.theme;
+  if (raw !== undefined && raw !== null) {
+    if (typeof raw === 'string' && (THEME_NAMES as readonly string[]).includes(raw)) {
+      theme = raw as ThemeName;
+    } else {
+      errors.push({
+        line: themeLine,
+        message: `theme "${String(raw)}" is not known; use "theme: slides" or leave theme out for the default look.`,
+      });
+    }
+  }
+  const titleSlide: TitleSlideFields = {};
+  for (const key of TITLE_SLIDE_KEYS) {
+    const value = front.fields[key];
+    if (typeof value === 'string' || typeof value === 'number') titleSlide[key] = String(value);
+  }
+  const given = TITLE_SLIDE_KEYS.filter((key) => titleSlide[key] !== undefined);
+  if (theme !== 'slides' && given.length > 0) {
+    warnings.push({
+      line: Math.min(...given.map((key) => front.keyLines.get(key) ?? 1)),
+      message:
+        `${given.join(', ')} ${given.length === 1 ? 'is' : 'are'} only drawn with "theme: slides", ` +
+        'on its title slide; add the theme or remove the field.',
+    });
+  }
+  return { theme, themeLine, titleSlide };
 }
 
 export function isMermaid(token: Tokens.Code): boolean {
@@ -104,6 +166,11 @@ function plainLength(html: string): number {
     .replace(/&[a-z]+;/g, ' ').length;
 }
 
+/** Whether each item of a list is a task item ("- [ ]" or "- [x]"). */
+function taskItems(list: Tokens.List): boolean[] {
+  return list.items.map((item) => item.task === true);
+}
+
 function listItems(list: Tokens.List, line: number, warnings: DocFinding[]): string[] {
   let itemLine = line;
   return list.items.map((item, index) => {
@@ -142,22 +209,35 @@ function isClosed(raw: string): boolean {
 }
 
 export function parseDocument(source: string): DocModel {
-  const { body, title } = splitFrontMatter(source.replace(/\r\n?/g, '\n'));
-  const tokens = new Lexer().lex(body);
+  const front = splitFrontMatter(source.replace(/\r\n?/g, '\n'));
+  const tokens = new Lexer().lex(front.body);
   const errors: DocFinding[] = [];
   const warnings: DocFinding[] = [];
+  const { theme, themeLine, titleSlide } = themeFields(front, errors, warnings);
 
-  let name: string | null = title;
-  const intro: DocFrame = { title: '', line: 0, blocks: [] };
+  let name: string | null = front.title;
+  const intro: DocFrame = { title: '', html: '', line: 0, blocks: [] };
   const frames: DocFrame[] = [];
   let current: DocFrame = intro;
   let line = 1;
 
-  /** Consecutive paragraphs, sub-headings and quotes become one text block. */
-  const addText = (html: string, at: number) => {
+  /**
+   * Consecutive paragraphs, sub-headings and quotes become one text block. `quote` is the
+   * quote's HTML without italics; the block keeps it only while it holds quotes alone.
+   */
+  const addText = (html: string, at: number, quote?: string) => {
     const last = current.blocks.at(-1);
-    if (last?.kind === 'text') last.html += html;
-    else current.blocks.push({ kind: 'text', line: at, html });
+    if (last?.kind === 'text') {
+      last.html += html;
+      if (last.quote !== undefined && quote !== undefined) last.quote += quote;
+      else delete last.quote;
+    } else {
+      current.blocks.push(
+        quote === undefined
+          ? { kind: 'text', line: at, html }
+          : { kind: 'text', line: at, html, quote },
+      );
+    }
     if (current === intro && intro.line === 0) intro.line = at;
   };
   const addBlock = (block: Block) => {
@@ -176,7 +256,7 @@ export function parseDocument(source: string): DocModel {
         if (heading.depth === 1 && name === null) {
           name = heading.text.trim();
         } else if (heading.depth <= 2) {
-          current = { title: heading.text.trim(), line: at, blocks: [] };
+          current = { title: heading.text.trim(), html: text, line: at, blocks: [] };
           frames.push(current);
         } else {
           addText(`<p><strong>${text}</strong></p>`, at);
@@ -190,7 +270,7 @@ export function parseDocument(source: string): DocModel {
         const inner = (token as Tokens.Blockquote).tokens
           .map((t) => ('tokens' in t ? inlineHtml(t.tokens as Token[], at, warnings) : ''))
           .filter(Boolean);
-        for (const part of inner) addText(`<p><em>${part}</em></p>`, at);
+        for (const part of inner) addText(`<p><em>${part}</em></p>`, at, `<p>${part}</p>`);
         break;
       }
       case 'list':
@@ -198,6 +278,7 @@ export function parseDocument(source: string): DocModel {
           kind: 'stickies',
           line: at,
           items: listItems(token as Tokens.List, at, warnings),
+          tasks: taskItems(token as Tokens.List),
         });
         break;
       case 'code': {
@@ -236,7 +317,10 @@ export function parseDocument(source: string): DocModel {
     }
   }
 
-  if (intro.blocks.length > 0) frames.unshift({ ...intro, title: name ?? 'Overview' });
+  if (intro.blocks.length > 0) {
+    const title = name ?? 'Overview';
+    frames.unshift({ ...intro, title, html: escapeHtml(title) });
+  }
   if (name === null) {
     warnings.push({
       line: 1,
@@ -267,5 +351,5 @@ export function parseDocument(source: string): DocModel {
       warnings.push({ line: frame.line, message: `frame "${frame.title}" is empty.` });
     }
   }
-  return { name, frames, errors, warnings };
+  return { name, theme, themeLine, titleSlide, frames, errors, warnings };
 }

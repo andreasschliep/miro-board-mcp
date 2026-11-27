@@ -24,6 +24,8 @@ A board is one Markdown document. The server places every frame and element; the
 
 The same document renders in any Markdown viewer that supports Mermaid, so the source stays readable without Miro.
 
+`theme: slides` in the front matter switches to a slide look for webinars: fixed 6078 x 4332 frames, a white title slide from the front matter, black content slides with the heading top left, dark cards for list items, yellow sticky notes only for task items (`- [ ]`), a lone quote as a statement slide, flowcharts scaled to the free space, and footer logos from the server configuration. A slide that is too full is a layout warning on its heading line, so the agent splits it instead of shrinking the text. Without `theme`, the output is exactly what it was before; a golden test guards that.
+
 | Tool             | What it does                                                                                                                                                            |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `validate_board` | Checks a document without building anything: errors and warnings with their Markdown line, texts that will not fit, elements outside their frame. Read-only.            |
@@ -89,6 +91,7 @@ The server writes to a shared workspace on behalf of a model, so every write is 
 - **Limits.** Input size, frames, elements, API calls per build, builds per process and build time are capped; a build stops between frames on cancellation and at once on 401, 403 or 404, and returns what exists.
 - **Secrets.** The Miro token comes only from the environment, is never logged and never appears in a result.
 - **No external content.** Images and embeds need an https host from `MIRO_MCP_ALLOWED_URL_HOSTS` (none by default); YAML `!include` is off; alias bombs are stopped before parsing.
+- **No local files.** An image from a local file is uploaded to Miro, so only the slide logos named in the server environment may come from a file; any other `file` in a spec is an error.
 - **stdio discipline.** stdout carries JSON-RPC only; all logging goes to stderr.
 
 The reasoning behind each of these is in [docs/design.md](docs/design.md).
@@ -117,12 +120,14 @@ npx @modelcontextprotocol/inspector --cli node dist/server.js --method tools/lis
 
 Copy [.env.example](.env.example) and set the variables in the environment of the server process:
 
-| Variable                     | Needed for                                   |
-| ---------------------------- | -------------------------------------------- |
-| `MIRO_ACCESS_TOKEN`          | `build_board`, `list_frames`                 |
-| `MIRO_TEAM_ID`               | optional: team for new boards                |
-| `MIRO_MCP_ALLOWED_BOARD_IDS` | optional: existing boards the server may use |
-| `MIRO_MCP_ALLOWED_URL_HOSTS` | optional: hosts for images and embeds        |
+| Variable                     | Needed for                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `MIRO_ACCESS_TOKEN`          | `build_board`, `list_frames`                                                  |
+| `MIRO_TEAM_ID`               | optional: team for new boards                                                 |
+| `MIRO_MCP_ALLOWED_BOARD_IDS` | optional: existing boards the server may use                                  |
+| `MIRO_MCP_ALLOWED_URL_HOSTS` | optional: hosts for images and embeds                                         |
+| `MIRO_SLIDE_LOGO_LEFT`       | optional: footer logo, left, for `theme: slides` (absolute path or https URL) |
+| `MIRO_SLIDE_LOGO_RIGHT`      | optional: footer logo, right, for `theme: slides`                             |
 
 With 1Password, keep only a reference in an env file (`MIRO_ACCESS_TOKEN=op://Vault/Item/field`) and start the server through `op run --no-masking --env-file=...`; `--no-masking` keeps stdio untouched. Claude Code waits 30 seconds for a server to start; set `MCP_TIMEOUT=120000` if the 1Password approval takes longer.
 
@@ -161,6 +166,7 @@ The tools then appear in the tools menu of a new chat.
 ## Limits
 
 - Frames are placed in one row; inside a frame, blocks stack from the top. There is no free placement in a document; use `spec` for that.
+- With `theme: slides`, frames have a fixed size; text heights are estimated, not measured, so the check for full slides errs on the safe side.
 - Mermaid support covers `flowchart` and `wardley-beta`. Flowcharts are parsed by the official `mermaid` package, which needs a DOM in Node; a jsdom window provides it, at the cost of about 130 MB of dependencies.
 - `evolve` on a part of a pipeline is not drawn, because Mermaid does not draw it either.
 - The server never updates or deletes existing items. A second build adds a second copy.
@@ -170,7 +176,7 @@ The tools then appear in the tools menu of a new chat.
 
 What existed before: [miro-board-builder](https://github.com/andreasschliep/miro-board-builder), my generator that builds a Miro board from a YAML description through the REST API.
 
-What is new: this MCP server, built in November 2026. It started with the generator's YAML as input. Three end-to-end runs with an agent and a fault test with 20 deliberate mistakes shaped it: the coordinate errors of the first two runs led to layout warnings and then to Markdown with Mermaid as the input, so that the server computes every position; the fault test led to findings that name the line of their cause. The generator gained two library options (no `!include` for untrusted input; stop on cancellation and on fatal Miro errors) and schema descriptions.
+What is new: this MCP server, built in November 2026. It started with the generator's YAML as input. Three end-to-end runs with an agent and a fault test with 20 deliberate mistakes shaped it: the coordinate errors of the first two runs led to layout warnings and then to Markdown with Mermaid as the input, so that the server computes every position; the fault test led to findings that name the line of their cause. The generator gained two library options (no `!include` for untrusted input; stop on cancellation and on fatal Miro errors) and schema descriptions. Later, `theme: slides` taught the document mode the slide style of my focus-topic webinars; for its logos and arrow labels the generator learned to upload local image files and to style connector captions (version 1.2.0).
 
 Claude Code was co-developer: it drafted much of the code, the tests and the documentation, and ran the end-to-end tests in separate sessions. I defined the problem, decided the design ([docs/design.md](docs/design.md)), reviewed every phase before the next one started, and approved every write to Miro.
 

@@ -6,6 +6,7 @@
  */
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { policyFrom } from '../config.ts';
 import type { ServerDeps } from '../deps.ts';
 import { LIMITS } from '../limits.ts';
 import { planBuild } from '../plan.ts';
@@ -36,7 +37,7 @@ export const previewOutput = z.object({
 export async function previewBoard(input: SourceInput, deps: ServerDeps): Promise<CallToolResult> {
   let checked;
   try {
-    checked = await checkSource(input, { allowedUrlHosts: deps.config.allowedUrlHosts });
+    checked = await checkSource(input, policyFrom(deps.config));
   } catch (error) {
     if (error instanceof SpecError)
       return domainError(error.message, error.hint, { code: error.code });
@@ -71,8 +72,8 @@ export async function previewBoard(input: SourceInput, deps: ServerDeps): Promis
       `${titleBars > 0 ? ' incl. title bar' : ''}, ${f.width} x ${f.height} at (${f.x}, ${f.y})`,
   );
   const text =
-    `Preview of "${plan.board_name}": ${plan.totals.frames} frames, ${plan.totals.elements} elements ` +
-    `(incl. ${titleBars} title bars), ` +
+    `Preview of "${plan.board_name}": ${plan.totals.frames} frames, ${plan.totals.elements} elements` +
+    `${titleBars > 0 ? ` (incl. ${titleBars} title bars)` : ''}, ` +
     `${plan.totals.connectors} connectors, ${plan.totals.api_calls} Miro API calls ` +
     `(about ${plan.estimated_seconds} s).\n${lines.join('\n')}\n` +
     (report.layout.length > 0

@@ -17,6 +17,7 @@ import {
   type NormalizedBoard,
   type RawBoard,
 } from 'miro-board-builder';
+import type { SlideLogos } from './document/theme.ts';
 import { layoutFindings, type LayoutFinding } from './layout.ts';
 import { LIMITS } from './limits.ts';
 
@@ -71,6 +72,11 @@ export interface CheckedSpec {
 
 export interface SpecPolicy {
   allowedUrlHosts: ReadonlySet<string>;
+  /**
+   * Footer logos of theme slides, from the server configuration. Their files are the only
+   * local files a board may upload, and their URLs need no entry in allowedUrlHosts.
+   */
+  slideLogos?: SlideLogos;
 }
 
 const SCHEMA_HINT = 'Read the resource board-spec://schema for the allowed fields.';
@@ -246,12 +252,31 @@ function limitFindings(board: NormalizedBoard): Finding[] {
   return findings;
 }
 
-/** image and embed place external content on the board: https and allowed hosts only. */
+/**
+ * image and embed place external content on the board: https and allowed hosts only.
+ * An image from a local file would upload that file to Miro, so only the slide logos
+ * the server is configured with may come from a file (threat T10).
+ */
 function urlFindings(board: NormalizedBoard, policy: SpecPolicy): Finding[] {
   const findings: Finding[] = [];
+  const logos = Object.values(policy.slideLogos ?? {});
+  const logoFiles = new Set(logos.filter((l) => l.kind === 'file').map((l) => l.value));
+  const logoUrls = new Set(logos.filter((l) => l.kind === 'url').map((l) => l.value));
   for (const [index, frame] of board.frames.entries()) {
     for (const { element, path } of walkElements(frame.elements, `/frames/${index}/elements`)) {
       if (element.type !== 'image' && element.type !== 'embed') continue;
+      if (element.file !== undefined) {
+        if (element.type !== 'image' || !logoFiles.has(String(element.file))) {
+          findings.push({
+            path: `${path}/file`,
+            message:
+              'images from local files are not allowed: they would upload the file to Miro. ' +
+              'Use an https URL on an allowed host.',
+          });
+        }
+        continue;
+      }
+      if (typeof element.url === 'string' && logoUrls.has(element.url)) continue;
       const host = httpsHost(element.url);
       if (!host) {
         findings.push({ path: `${path}/url`, message: `${element.type} needs an https URL.` });
