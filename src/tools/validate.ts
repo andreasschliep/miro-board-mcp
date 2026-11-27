@@ -40,10 +40,10 @@ function describe(
     : '';
   if (report.valid) {
     const summary =
-      `Valid: ${frames} frames, ${spec_elements} elements and connectors ` +
+      `Valid: ${frames} frames, ${spec_elements} elements and connectors` +
       ((board?.style as { headerBar?: boolean } | undefined)?.headerBar === false
         ? ''
-        : '(the title bar of each frame is added later and not counted)') +
+        : ' (the title bar of each frame is added later and not counted)') +
       ', ' +
       `${report.warnings.length} warnings, ${report.text_fit.length} text-fit warnings, ` +
       `${report.layout.length} layout warnings.${warnings}`;

@@ -55,6 +55,11 @@ const LOGO_MAX_BYTES = 6 * 1024 * 1024;
 type Line = number;
 type Placed = Array<[ElementSpec, Line]>;
 
+/** A paragraph, bold or italic when the theme says so. */
+function paragraph(html: string, emphasis: 'strong' | 'em' | null): string {
+  return emphasis ? `<p><${emphasis}>${html}</${emphasis}></p>` : `<p>${html}</p>`;
+}
+
 function estimate(html: string, fontSize: number, width: number): number {
   return estimateRequiredHeight(html, { fontSize, width });
 }
@@ -157,10 +162,15 @@ function titleSlide(model: DocModel): { elements: Placed; notes: string[] } {
   const place = (
     name: string,
     value: string,
-    style: { color: string; fontSize: number; width: number },
+    style: {
+      color: string;
+      fontSize: number;
+      width: number;
+      emphasis: 'strong' | 'em' | null;
+    },
     y: number,
   ) => {
-    const html = `<p>${escapeHtml(value)}</p>`;
+    const html = paragraph(escapeHtml(value), style.emphasis);
     const height = lineCount(html, style.fontSize, style.width) * style.fontSize * 1.6;
     elements.push([
       textElement(html, style, { x: 0, y, width: style.width }, 'center', font),
@@ -171,7 +181,7 @@ function titleSlide(model: DocModel): { elements: Placed; notes: string[] } {
 
   // A title of several lines grows upwards from where a one-line title ends, and pushes
   // the kicker up, at most to the safe margin.
-  const titleHtml = `<p>${escapeHtml(model.name)}</p>`;
+  const titleHtml = paragraph(escapeHtml(model.name), T.title.emphasis);
   const lineHeight = T.title.fontSize * 1.6;
   const titleHeight = lineCount(titleHtml, T.title.fontSize, T.title.width) * lineHeight;
   const titleBottom = T.title.y + lineHeight / 2;
@@ -179,7 +189,7 @@ function titleSlide(model: DocModel): { elements: Placed; notes: string[] } {
 
   const { kicker, subtitle, tagline, byline } = model.titleSlide;
   if (kicker !== undefined) {
-    const kickerHtml = `<p>${escapeHtml(kicker)}</p>`;
+    const kickerHtml = paragraph(escapeHtml(kicker), T.kicker.emphasis);
     const kickerHeight =
       lineCount(kickerHtml, T.kicker.fontSize, T.kicker.width) * T.kicker.fontSize * 1.6;
     const referenceGap = T.title.y - lineHeight / 2 - (T.kicker.y + (T.kicker.fontSize * 1.6) / 2);
@@ -327,7 +337,7 @@ function contentSlide(
   }
 
   const elements: Placed = [];
-  const headingHtml = `<p>${frame.html}</p>`;
+  const headingHtml = paragraph(frame.html, S.heading.emphasis);
   const headingHeight = estimate(headingHtml, S.heading.fontSize, SAFE_WIDTH);
   elements.push([
     textElement(

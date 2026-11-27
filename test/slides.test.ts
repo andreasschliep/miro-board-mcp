@@ -120,6 +120,14 @@ test('slides: the title slide comes first, built from the front matter as measur
     assert.equal(element.textAlign, 'center');
     assert.equal(element.fontFamily, 'open_sans');
   };
+  // As on the reference: kicker and title bold, tagline italic.
+  assert.equal(byText('FOCUS TOPIC').content, '<p><strong>FOCUS TOPIC</strong></p>');
+  assert.equal(byText('Clear code reviews').content, '<p><strong>Clear code reviews</strong></p>');
+  assert.equal(
+    byText('A fictional one-hour session').content,
+    '<p><em>A fictional one-hour session</em></p>',
+  );
+  assert.equal(byText('What makes feedback helpful').content, '<p>What makes feedback helpful</p>');
   expect('FOCUS TOPIC', '#EA8125', 130, 3000, -1266);
   expect('Clear code reviews', '#1A1A1A', 300, 5600, -566);
   expect('What makes feedback helpful', '#333333', 240, 5600, 284);
@@ -138,7 +146,7 @@ test('slides: heading top left in light violet, white body text, both Arial', as
   const { frames: list } = await frames();
   const slide = list[1]!;
   const [heading, body] = texts(slide);
-  assert.equal(plain(heading!.content), 'Why reviews matter');
+  assert.equal(heading!.content, '<p><strong>Why reviews matter</strong></p>');
   assert.equal(heading!.textColor, '#BC7AF5');
   assert.equal(heading!.fontSize, 190);
   assert.equal(heading!.textAlign, 'left');

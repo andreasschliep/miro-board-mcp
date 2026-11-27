@@ -30,20 +30,20 @@ export const SLIDES = {
   /** Content must stay this far from the frame edges, and above the footer line. */
   safe: { margin: 330, footerTop: 1800 },
 
-  /** Title slide: everything centred. */
+  /** Title slide: everything centred; kicker and title bold, tagline italic. */
   titleSlide: {
-    kicker: { color: '#EA8125', fontSize: 130, width: 3000, y: -1266 },
-    title: { color: '#1A1A1A', fontSize: 300, width: 5600, y: -566 },
+    kicker: { color: '#EA8125', fontSize: 130, width: 3000, y: -1266, emphasis: 'strong' },
+    title: { color: '#1A1A1A', fontSize: 300, width: 5600, y: -566, emphasis: 'strong' },
     bar: { color: '#EA8125', width: 1400, height: 36, y: -86 },
-    subtitle: { color: '#333333', fontSize: 240, width: 5600, y: 284 },
-    tagline: { color: '#555555', fontSize: 170, width: 5600, y: 684 },
-    byline: { color: '#555555', fontSize: 150, width: 5600, y: 1634 },
+    subtitle: { color: '#333333', fontSize: 240, width: 5600, y: 284, emphasis: null },
+    tagline: { color: '#555555', fontSize: 170, width: 5600, y: 684, emphasis: 'em' },
+    byline: { color: '#555555', fontSize: 150, width: 5600, y: 1634, emphasis: null },
     /** Smallest gap between two texts on the title slide. */
     minGap: 40,
   },
 
   /** Content slides: heading top left, blocks below it. */
-  heading: { color: '#BC7AF5', fontSize: 190, gapBelow: 160 },
+  heading: { color: '#BC7AF5', fontSize: 190, gapBelow: 160, emphasis: 'strong' },
   text: { color: '#FFFFFF', fontSize: 140, maxWidth: 5200 },
   blockGap: 120,
   /** A frame whose only block is a quote: one sentence, centred. */
