@@ -7,16 +7,18 @@
  */
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { policyFrom } from '../config.ts';
 import type { ServerDeps } from '../deps.ts';
 import { domainError, success } from '../results.ts';
 import { sourceFields, validationReport } from '../schemas.ts';
 import { checkSource, type SourceInput } from '../source.ts';
+import type { NormalizedBoard } from 'miro-board-builder';
 import { SpecError, type ValidationReport } from '../spec.ts';
 
 export async function validateBoard(input: SourceInput, deps: ServerDeps): Promise<CallToolResult> {
   try {
-    const { report } = await checkSource(input, { allowedUrlHosts: deps.config.allowedUrlHosts });
-    return success(describe(report, input.spec !== undefined), { ...report });
+    const { report, board } = await checkSource(input, policyFrom(deps.config));
+    return success(describe(report, input.spec !== undefined, board), { ...report });
   } catch (error) {
     if (error instanceof SpecError)
       return domainError(error.message, error.hint, { code: error.code });
@@ -24,7 +26,11 @@ export async function validateBoard(input: SourceInput, deps: ServerDeps): Promi
   }
 }
 
-function describe(report: ValidationReport, isSpec: boolean): string {
+function describe(
+  report: ValidationReport,
+  isSpec: boolean,
+  board: NormalizedBoard | null,
+): string {
   const { frames, spec_elements } = report.summary;
   const warnings = report.warnings.length
     ? `\n${report.warnings
@@ -35,7 +41,10 @@ function describe(report: ValidationReport, isSpec: boolean): string {
   if (report.valid) {
     const summary =
       `Valid: ${frames} frames, ${spec_elements} elements and connectors ` +
-      '(the title bar of each frame is added later and not counted), ' +
+      ((board?.style as { headerBar?: boolean } | undefined)?.headerBar === false
+        ? ''
+        : '(the title bar of each frame is added later and not counted)') +
+      ', ' +
       `${report.warnings.length} warnings, ${report.text_fit.length} text-fit warnings, ` +
       `${report.layout.length} layout warnings.${warnings}`;
     if (report.layout.length === 0) return `${summary}\nNext: preview_board.`;

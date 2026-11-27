@@ -8,10 +8,12 @@
  */
 import { estimateRequiredHeight, type ElementSpec, type RawBoard } from 'miro-board-builder';
 import { TITLE_BAR_HEIGHT } from '../layout.ts';
-import { flowchartDiagram } from './flowchart.ts';
+import { DEFAULT_FLOWCHART_LOOK, flowchartDiagram, type FlowchartLook } from './flowchart.ts';
 import { isMermaidKind, mermaidKind } from './mermaid.ts';
 import { parseDocument } from './markdown.ts';
-import { slug, type Block, type Diagram, type DocFinding } from './model.ts';
+import { slug, type Block, type Diagram, type DocFinding, type DocFrame } from './model.ts';
+import { composeSlides } from './slides.ts';
+import type { SlideLogos } from './theme.ts';
 import { wardleyDiagram } from './wardley.ts';
 
 export const FRAME_LAYOUT = {
@@ -25,6 +27,18 @@ export const FRAME_LAYOUT = {
   sticky: { width: 220, cellWidth: 250, cellHeight: 280 },
 } as const;
 
+export interface ComposeOptions {
+  /** Footer logos for theme slides, from the server configuration. */
+  slideLogos?: SlideLogos | undefined;
+}
+
+/** A layout problem the composer knows about, such as a slide that is too full. */
+export interface LayoutNote {
+  frameIndex: number;
+  line: number;
+  message: string;
+}
+
 export interface ComposedBoard {
   raw: RawBoard;
   /** Line of each frame heading, by frame index. */
@@ -33,6 +47,48 @@ export interface ComposedBoard {
   elementLines: Map<string, number>;
   errors: DocFinding[];
   warnings: DocFinding[];
+  layout: LayoutNote[];
+}
+
+/** A frame id from the title that no earlier frame uses. */
+export function uniqueId(title: string, usedIds: Set<string>): string {
+  let id = slug(title);
+  for (let n = 2; usedIds.has(id); n++) id = `${slug(title).slice(0, 36)}-${n}`;
+  usedIds.add(id);
+  return id;
+}
+
+/** Every Mermaid block of a frame as a diagram around its own centre. */
+export async function frameDiagrams(
+  frame: DocFrame,
+  id: string,
+  errors: DocFinding[],
+  warnings: DocFinding[],
+  look: FlowchartLook = DEFAULT_FLOWCHART_LOOK,
+): Promise<Map<Block, Diagram & { kind: 'wardley' | 'flowchart' }>> {
+  const diagrams = new Map<Block, Diagram & { kind: 'wardley' | 'flowchart' }>();
+  for (const [index, block] of frame.blocks.entries()) {
+    if (block.kind !== 'mermaid') continue;
+    const kind = mermaidKind(block.code);
+    const refPrefix = `${id}-${index}`;
+    let diagram: Diagram;
+    if (kind === 'wardley') diagram = await wardleyDiagram(block.code, block.codeLine, refPrefix);
+    else if (kind === 'flowchart')
+      diagram = await flowchartDiagram(block.code, block.codeLine, refPrefix, look);
+    else {
+      diagram = { elements: [], width: 0, height: 0, warnings: [], errors: [] };
+      errors.push({
+        line: block.line,
+        message: isMermaidKind(kind)
+          ? `Mermaid "${kind}" is not supported; use flowchart or wardley-beta.`
+          : 'this Mermaid block has no diagram type; start it with "flowchart TD" or "wardley-beta".',
+      });
+    }
+    errors.push(...diagram.errors);
+    warnings.push(...diagram.warnings);
+    diagrams.set(block, { ...diagram, kind: kind === 'wardley' ? 'wardley' : 'flowchart' });
+  }
+  return diagrams;
 }
 
 type Placed =
@@ -40,8 +96,12 @@ type Placed =
   | { block: Block; kind: 'stickies'; height: number; width: number; columns: number }
   | { block: Block; kind: 'diagram'; height: number; width: number; diagram: Diagram };
 
-export async function composeDocument(markdown: string): Promise<ComposedBoard> {
+export async function composeDocument(
+  markdown: string,
+  options: ComposeOptions = {},
+): Promise<ComposedBoard> {
   const model = parseDocument(markdown);
+  if (model.theme === 'slides') return composeSlides(model, options);
   const errors = [...model.errors];
   const warnings = [...model.warnings];
   const frameLines: number[] = [];
@@ -51,33 +111,10 @@ export async function composeDocument(markdown: string): Promise<ComposedBoard> 
   let cursorX = 0;
 
   for (const [frameIndex, frame] of model.frames.entries()) {
-    let id = slug(frame.title);
-    for (let n = 2; usedIds.has(id); n++) id = `${slug(frame.title).slice(0, 36)}-${n}`;
-    usedIds.add(id);
+    const id = uniqueId(frame.title, usedIds);
 
     // Diagrams first: they decide how wide the frame gets.
-    const diagrams = new Map<Block, Diagram>();
-    for (const [index, block] of frame.blocks.entries()) {
-      if (block.kind !== 'mermaid') continue;
-      const kind = mermaidKind(block.code);
-      const refPrefix = `${id}-${index}`;
-      let diagram: Diagram;
-      if (kind === 'wardley') diagram = await wardleyDiagram(block.code, block.codeLine, refPrefix);
-      else if (kind === 'flowchart')
-        diagram = await flowchartDiagram(block.code, block.codeLine, refPrefix);
-      else {
-        diagram = { elements: [], width: 0, height: 0, warnings: [], errors: [] };
-        errors.push({
-          line: block.line,
-          message: isMermaidKind(kind)
-            ? `Mermaid "${kind}" is not supported; use flowchart or wardley-beta.`
-            : 'this Mermaid block has no diagram type; start it with "flowchart TD" or "wardley-beta".',
-        });
-      }
-      errors.push(...diagram.errors);
-      warnings.push(...diagram.warnings);
-      diagrams.set(block, diagram);
-    }
+    const diagrams: Map<Block, Diagram> = await frameDiagrams(frame, id, errors, warnings);
 
     const widest = Math.max(0, ...[...diagrams.values()].map((d) => d.width));
     const contentWidth = Math.max(FRAME_LAYOUT.minWidth - 2 * FRAME_LAYOUT.padding, widest);
@@ -185,5 +222,12 @@ export async function composeDocument(markdown: string): Promise<ComposedBoard> 
     cursorX += width + FRAME_LAYOUT.frameGap;
   }
 
-  return { raw: { name: model.name, frames }, frameLines, elementLines, errors, warnings };
+  return {
+    raw: { name: model.name, frames },
+    frameLines,
+    elementLines,
+    errors,
+    warnings,
+    layout: [],
+  };
 }

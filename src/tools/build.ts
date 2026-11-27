@@ -21,6 +21,7 @@ import {
   type NormalizedBoard,
 } from 'miro-board-builder';
 import { z } from 'zod';
+import { policyFrom } from '../config.ts';
 import { boardUrl, isBoardAllowed, type ServerDeps } from '../deps.ts';
 import { LIMITS } from '../limits.ts';
 import { collectingLogger } from '../logger.ts';
@@ -111,7 +112,7 @@ export async function buildBoard(
   let board: NormalizedBoard;
   let plan: BuildPlan;
   try {
-    const checked = await checkSource(input, { allowedUrlHosts: deps.config.allowedUrlHosts });
+    const checked = await checkSource(input, policyFrom(deps.config));
     if (!checked.report.valid || !checked.board) {
       return domainError(
         `The board is not valid (${checked.report.errors.length} errors).`,

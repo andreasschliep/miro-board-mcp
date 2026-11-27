@@ -172,7 +172,25 @@ function lineChecks(
 
 const DIRECTIONS: Record<string, string> = { TB: 'TB', TD: 'TB', BT: 'BT', LR: 'LR', RL: 'RL' };
 const FONT = 16;
-const COLOURS = { fill: '#FFFFFF', stroke: '#343A40', text: '#212529', edge: '#495057' };
+/** Size of edge labels; dagre reserves space for them at this size. */
+const CAPTION_FONT = 14;
+
+/** Colours of nodes, edges and subgraph boxes that classDef and style do not set. */
+export interface FlowchartLook {
+  node: { fill: string; stroke: string; text: string };
+  edge: string;
+  subgraph: { fill: string; border: string; text: string };
+  /** Caption text colour; without it Miro draws captions dark at size 14. */
+  caption?: string;
+  /** Font of node labels and subgraph titles; without it Miro's default. */
+  fontFamily?: string;
+}
+
+export const DEFAULT_FLOWCHART_LOOK: FlowchartLook = {
+  node: { fill: '#FFFFFF', stroke: '#343A40', text: '#212529' },
+  edge: '#495057',
+  subgraph: { fill: '#F8F9FA', border: '#ADB5BD', text: '#212529' },
+};
 
 function values<T>(collection: Map<string, T> | Record<string, T> | undefined): Array<[string, T]> {
   if (!collection) return [];
@@ -230,7 +248,9 @@ export async function flowchartDiagram(
   code: string,
   codeLine: number,
   refPrefix: string,
+  look: FlowchartLook = DEFAULT_FLOWCHART_LOOK,
 ): Promise<Diagram> {
+  const font = look.fontFamily ? { fontFamily: look.fontFamily } : {};
   const errors: DocFinding[] = [];
   const warnings: DocFinding[] = [];
   const { body, lineOffset } = mermaidFrontMatter(code);
@@ -350,9 +370,9 @@ export async function flowchartDiagram(
     nodes.set(id, {
       lines,
       shape: resolved,
-      fill: cssColour(styles, 'fill') ?? COLOURS.fill,
-      stroke: cssColour(styles, 'stroke') ?? COLOURS.stroke,
-      text: cssColour(styles, 'color') ?? COLOURS.text,
+      fill: cssColour(styles, 'fill') ?? look.node.fill,
+      stroke: cssColour(styles, 'stroke') ?? look.node.stroke,
+      text: cssColour(styles, 'color') ?? look.node.text,
     });
     graph.setNode(id, nodeSize(lines, resolved));
   }
@@ -364,7 +384,9 @@ export async function flowchartDiagram(
   }
   parsed.edges.forEach((edge, index) => {
     if (clusterIds.has(edge.start) || clusterIds.has(edge.end)) return;
-    const label = edge.text ? { width: textWidth(edge.text, 14), height: 24, labelpos: 'c' } : {};
+    const label = edge.text
+      ? { width: textWidth(edge.text, CAPTION_FONT), height: 24, labelpos: 'c' }
+      : {};
     graph.setEdge(edge.start, edge.end, label, `e${index}`);
   });
 
@@ -395,8 +417,8 @@ export async function flowchartDiagram(
       y: Math.round(top + boxHeight / 2 + dy),
       width: Math.round(box.width),
       height: Math.round(boxHeight),
-      color: '#F8F9FA',
-      borderColor: '#ADB5BD',
+      color: look.subgraph.fill,
+      borderColor: look.subgraph.border,
       borderWidth: 1,
     });
     elements.push({
@@ -406,8 +428,9 @@ export async function flowchartDiagram(
       y: Math.round(top + 20 + dy),
       width: Math.max(80, Math.round(box.width - 24)),
       fontSize: 16,
-      textColor: COLOURS.text,
+      textColor: look.subgraph.text,
       textAlign: 'left',
+      ...font,
     });
   }
 
@@ -426,6 +449,7 @@ export async function flowchartDiagram(
       borderColor: node.stroke,
       textColor: node.text,
       fontSize: FONT,
+      ...font,
     });
   }
 
@@ -447,10 +471,11 @@ export async function flowchartDiagram(
       shape: 'elbowed',
       startCap: caps.start,
       endCap: caps.end,
-      color: COLOURS.edge,
+      color: look.edge,
       ...(edge.stroke === 'thick' ? { strokeWidth: 4 } : {}),
       ...(edge.stroke === 'dotted' ? { strokeStyle: 'dotted' } : {}),
       ...(edge.text ? { caption: escapeHtml(labelLines(edge.text, '').join(' ')) } : {}),
+      ...(edge.text && look.caption ? { textColor: look.caption, fontSize: CAPTION_FONT } : {}),
     });
   }
 

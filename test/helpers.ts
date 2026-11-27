@@ -5,6 +5,7 @@
 import { HttpTransport } from 'miro-board-builder';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { ServerDeps } from '../src/deps.ts';
+import type { SlideLogos } from '../src/document/theme.ts';
 import { silentLogger } from '../src/logger.ts';
 
 export interface FakeCall {
@@ -66,6 +67,7 @@ export function testDeps(
     token?: string | null;
     allowedBoardIds?: string[];
     allowedUrlHosts?: string[];
+    slideLogos?: SlideLogos;
     miro?: ReturnType<typeof fakeMiro>;
     buildTimeoutMs?: number;
   } = {},
@@ -77,6 +79,7 @@ export function testDeps(
       teamId: undefined,
       allowedBoardIds: new Set(options.allowedBoardIds ?? []),
       allowedUrlHosts: new Set(options.allowedUrlHosts ?? []),
+      slideLogos: options.slideLogos ?? {},
     },
     logger: silentLogger,
     createTransport: miro.createTransport,

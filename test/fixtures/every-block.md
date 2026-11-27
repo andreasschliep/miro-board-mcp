@@ -6,7 +6,7 @@ Intro text before the first frame, with a [link](https://example.com/a).
 
 ## Text and quotes
 
-A paragraph with **bold**, *italic*, ~~struck~~ and `code`.
+A paragraph with **bold**, _italic_, ~~struck~~ and `code`.
 
 ### A sub-heading
 
@@ -21,6 +21,7 @@ A paragraph with **bold**, *italic*, ~~struck~~ and `code`.
 - Item with a nested list
   - nested one
   - nested two
+
 1. Ordered one
 2. Ordered two
 

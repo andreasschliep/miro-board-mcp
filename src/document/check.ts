@@ -31,7 +31,7 @@ export async function checkDocument(markdown: string, policy: SpecPolicy): Promi
     );
   }
 
-  const composed = await composeDocument(markdown);
+  const composed = await composeDocument(markdown, { slideLogos: policy.slideLogos });
   const byLine = (a: Finding, b: Finding) => (a.line ?? 0) - (b.line ?? 0);
   if ((composed.raw.frames as unknown[]).length === 0) {
     // Nothing to build: the document findings say why; the generator's schema errors
@@ -67,18 +67,30 @@ export async function checkDocument(markdown: string, policy: SpecPolicy): Promi
   const warnings = [...composed.warnings.map(fromDoc), ...report.warnings.map(located)].sort(
     byLine,
   );
-  const layout = report.layout
-    .map((finding) => {
-      const line = lineFor(finding.path);
-      return line ? { ...finding, path: `line ${line}`, line } : finding;
-    })
-    .sort((a, b) => (a.line ?? 0) - (b.line ?? 0));
+  const notes = composed.layout.map((note) => ({
+    frame_id: frameIds[note.frameIndex] ?? '',
+    path: `line ${note.line}`,
+    message: note.message,
+    line: note.line,
+  }));
+  // A slide that is too full also has elements beyond its edge; one message is enough.
+  const full = new Set(notes.map((note) => note.frame_id));
+  const layout = [
+    ...notes,
+    ...report.layout
+      .filter((finding) => !full.has(finding.frame_id))
+      .map((finding) => {
+        const line = lineFor(finding.path);
+        return line ? { ...finding, path: `line ${line}`, line } : finding;
+      }),
+  ].sort((a, b) => (a.line ?? 0) - (b.line ?? 0));
+  // The generator counts the title bar it adds as element 0, when there is one.
+  const titleBar = (composed.raw.style as { headerBar?: boolean } | undefined)?.headerBar !== false;
   const textFit = report.text_fit.map((finding) => {
     const frame = frameIds.indexOf(finding.frame_id);
-    // The generator counts the title bar it adds as element 0.
+    const index = finding.element_index - (titleBar ? 1 : 0);
     const line =
-      composed.elementLines.get(`/frames/${frame}/elements/${finding.element_index - 1}`) ??
-      composed.frameLines[frame];
+      composed.elementLines.get(`/frames/${frame}/elements/${index}`) ?? composed.frameLines[frame];
     return line ? { ...finding, line } : finding;
   });
 
