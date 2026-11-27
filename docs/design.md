@@ -207,7 +207,7 @@ Rule: the generator is not changed without approval. Both changes are implemente
 
 Without approval the server would override the parser's internal `_schema()` method for A, and wrap the transport so that it fails every further call after the first fatal error for B. That works, but it depends on private internals.
 
-Approved on 27 November 2026 for `theme: slides` (section 16), as version 1.2.0 on the generator branch `image-upload-caption-style` (commit `72002f9`), not yet published:
+Approved on 27 November 2026 for `theme: slides` (section 16), as version 1.2.0 on the generator branch `image-upload-caption-style` (commit `12ff4c7`), not yet published:
 
 |     | Change                                                                                                                                                              | Why                                         |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
@@ -432,7 +432,7 @@ The values come from a read-only query of a reference board through the REST API
 
 **Run 1.** The document for the first webinar (19 slides, 183 planned API calls) was built on a new board through a local script, because the MCP client gives up after about 60 seconds: dry run, hash compared with the approved preview, then the build. Every one of the 34 logo uploads got HTTP 500. With four retries each, the build reached the 10-minute limit after 17 of 19 frames, before the connectors; the result said so and listed what existed. A read-only comparison of what was built against the reference matched frame size, fills, the fonts, sizes and colours of the title slide, heading and body text, and the card style.
 
-**Cause and fix.** `FormData` gives a `Blob` part the file name "blob", so the JSON part with position and size looked like a second file. The generator now writes the body by hand, as `curl -F` does: `resource` with its file name, `data` as `application/json` without one (commit `7846bb9`). One test upload after Andreas's yes created the SVG logo at 523 x 259, as on the reference.
+**Cause and fix.** `FormData` gives a `Blob` part the file name "blob", so the JSON part with position and size looked like a second file. The generator now writes the body by hand, as `curl -F` does: `resource` with its file name, `data` as `application/json` without one (commit `762ccca`). One test upload after Andreas's yes created the SVG logo at 523 x 259, as on the reference.
 
 **Run 2.** After the fix, the same document with the same hash was built on another new board: 19 of 19 frames, 149 elements, 15 connectors, 184 API calls, 0 errors, 0 retries, 146 s against an estimate of 119 s. A read-only comparison with the reference: frames 6078 x 4332 with the same fills; title slide in Open Sans 130, 300, 240, 170 and 150 in the reference colours; headings Arial 190 in `#BC7AF5` (reference 193), body text Arial 140 in white (reference 139); cards `#151515` with a white border of 2; both logos at the reference size and position (the right one 1 unit to the left, 16.2); connectors and captions white.
 
