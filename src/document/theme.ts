@@ -48,13 +48,16 @@ export const SLIDES = {
   blockGap: 120,
   /** A frame whose only block is a quote: one sentence, centred. */
   statement: { color: '#FFFFFF', fontSize: 380, width: 5300 },
-  /** List items: dark cards in the AME3 style. */
+  /**
+   * List items: dark cards in the AME3 style. The AME3 shapes use text of about 70; on a
+   * slide where the cards are the content, 110 reads better (Andreas, 27 November 2026).
+   */
   card: {
     fill: '#151515',
     border: '#FFFFFF',
     borderWidth: 2,
     text: '#FFFFFF',
-    fontSize: 70,
+    fontSize: 110,
     maxColumns: 3,
     gap: 120,
     minHeight: 300,

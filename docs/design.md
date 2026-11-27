@@ -392,7 +392,7 @@ The values come from a read-only query of a reference board through the REST API
 - Title slide: white; kicker orange, 130; title 300; an orange bar of 1400 x 36; subtitle 240; tagline 170; byline 150; all centred, Open Sans, at the measured heights.
 - Content slides: black (`#010101`); heading light violet (`#BC7AF5`), Arial 190, top left on a 330 margin; text white, Arial 140, up to 5200 wide; footer from y 1800 with the two logos at the measured positions.
 - A lone quote: a statement slide, white, Arial 380, 5300 wide, centred.
-- Cards in the AME3 style: fill `#151515`, white border 2, white text 70.
+- Cards in the AME3 style: fill `#151515`, white border 2, white text (70 on the AME3 shapes, 110 on slides, D27).
 
 ### 16.3 Mapping
 
@@ -425,3 +425,5 @@ The values come from a read-only query of a reference board through the REST API
 **D25 Fixed slides, warnings instead of shrinking.** Decision: content stacks below the heading in the safe area (330 margin, footer from y 1800); text sizes are fixed; diagrams take the height that is left, within their scale limits. What does not fit is one layout warning on the frame's heading line ("too full ... split it"); the generator's own edge warnings for that frame are dropped, one cause, one message. Alternative: shrink fonts until the content fits. Reason: slides with shrinking text get hard to read in a webinar; splitting keeps one idea per slide. Heights are the generator's text estimate, which errs on the safe side.
 
 **D26 Wardley maps on a white panel.** Decision: maps keep their colours and get a white rectangle behind them. Alternative: a dark map style. Reason: no current slide deck needs a map; the panel keeps a map readable with a few lines of code.
+
+**D27 Card text 110, not the measured 70.** Decision: list cards use text size 110. Alternative: 70, as on the AME3 shapes of the reference. Reason: in a local rendering of the first real document, cards at 70 looked like labels next to body text at 140, and most slides stayed half empty; at 110 they read as the content of the slide. Cost: three slides of that document became too full and were split in the document, as D25 asks; for the two thinking exercises the sticky-note template now has a frame of its own, which is where participants put their notes anyway.

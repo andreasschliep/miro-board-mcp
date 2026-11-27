@@ -180,7 +180,7 @@ test('slides: list items are dark AME3 cards, task items yellow stickies', async
         card.fontSize,
         card.fontFamily,
       ],
-      ['#151515', '#FFFFFF', 2, '#FFFFFF', 70, 'arial'],
+      ['#151515', '#FFFFFF', 2, '#FFFFFF', 110, 'arial'],
     );
   }
   const stickies = slide.elements.filter((e) => e.type === 'sticky');
